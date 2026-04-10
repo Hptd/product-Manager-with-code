@@ -1,0 +1,611 @@
+import express from 'express';
+import cors from 'cors';
+import { WebSocketServer, WebSocket } from 'ws';
+import http from 'http';
+import path from 'path';
+import fs from 'fs';
+import chokidar from 'chokidar';
+import multer from 'multer';
+const pty = require('node-pty');
+
+const app = express();
+const PORT = 3001;
+const WS_PORT = 3002;
+
+// 项目根目录（axure 文件夹所在路径）
+const PROJECT_ROOT = path.join(__dirname, '..');
+const AXURE_DIR = path.join(PROJECT_ROOT, 'axure');
+const PROJECTS_DIR = path.join(AXURE_DIR, 'projects');
+
+app.use(cors());
+app.use(express.json());
+
+// 存储终端会话
+const terminalSessions = new Map();
+
+// 配置 multer 用于文件上传
+const uploadDir = path.join(PROJECTS_DIR, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB 限制
+});
+
+// 确保 projects 目录存在
+if (!fs.existsSync(PROJECTS_DIR)) {
+  fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+}
+
+// 获取项目列表 API
+app.get('/api/projects', async (req, res) => {
+  try {
+    const projects = await getProjectsList();
+    res.json({ success: true, projects });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to get projects' });
+  }
+});
+
+// 创建项目 API
+app.post('/api/projects', async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ success: false, error: '项目名称不能为空' });
+    }
+    
+    const projectDir = path.join(PROJECTS_DIR, name);
+    
+    if (fs.existsSync(projectDir)) {
+      return res.status(400).json({ success: false, error: '项目已存在' });
+    }
+    
+    // 创建项目目录结构
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'js'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'css'), { recursive: true });
+    
+    // 创建默认 index.html
+    const defaultHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${name}</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <h1>欢迎来到 ${name}</h1>
+    <p>这是一个新创建的项目</p>
+  </div>
+  <script src="js/app.js"></script>
+</body>
+</html>`;
+    
+    fs.writeFileSync(path.join(projectDir, 'index.html'), defaultHtml, 'utf-8');
+    
+    console.log(`✅ 新项目已创建：${name}`);
+    res.json({ success: true, project: { name, path: name } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to create project' });
+  }
+});
+
+// 删除项目 API
+app.delete('/api/projects/:projectName', async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const projectDir = path.join(PROJECTS_DIR, projectName);
+    
+    if (!fs.existsSync(projectDir)) {
+      return res.status(404).json({ success: false, error: '项目不存在' });
+    }
+    
+    await fs.promises.rm(projectDir, { recursive: true });
+    console.log(`🗑️ 项目已删除：${projectName}`);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to delete project' });
+  }
+});
+
+// 获取指定项目的文件树 API
+app.get('/api/files', async (req, res) => {
+  try {
+    const projectName = req.query.project as string || 'project-1';
+    const projectDir = path.join(PROJECTS_DIR, projectName);
+    
+    if (!fs.existsSync(projectDir)) {
+      return res.json({ success: true, files: [] });
+    }
+    
+    const files = await getFilesRecursively(projectDir);
+    res.json({ success: true, files });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to get files' });
+  }
+});
+
+// 读取文件内容 API
+app.get('/api/file', async (req, res) => {
+  try {
+    const projectName = req.query.project as string || 'project-1';
+    const filePath = req.query.path as string;
+    const fullPath = path.join(PROJECTS_DIR, projectName, filePath);
+    
+    if (!fullPath.startsWith(PROJECTS_DIR)) {
+      return res.status(403).json({ success: false, error: 'Invalid path' });
+    }
+    const content = await fs.promises.readFile(fullPath, 'utf-8');
+    res.json({ success: true, content });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to read file' });
+  }
+});
+
+// 保存文件 API
+app.post('/api/file', async (req, res) => {
+  try {
+    const projectName = req.body.project || 'project-1';
+    const { path: filePath, content } = req.body;
+    const fullPath = path.join(PROJECTS_DIR, projectName, filePath);
+    
+    if (!fullPath.startsWith(PROJECTS_DIR)) {
+      return res.status(403).json({ success: false, error: 'Invalid path' });
+    }
+    
+    // 确保目录存在
+    const dir = path.dirname(fullPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    await fs.promises.writeFile(fullPath, content, 'utf-8');
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to save file' });
+  }
+});
+
+// 创建文件夹 API
+app.post('/api/folder', async (req, res) => {
+  try {
+    const projectName = req.body.project || 'project-1';
+    const { path: folderPath } = req.body;
+    const fullPath = path.join(PROJECTS_DIR, projectName, folderPath);
+    
+    if (!fullPath.startsWith(PROJECTS_DIR)) {
+      return res.status(403).json({ success: false, error: 'Invalid path' });
+    }
+    
+    await fs.promises.mkdir(fullPath, { recursive: true });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to create folder' });
+  }
+});
+
+// 创建文件 API
+app.post('/api/create-file', async (req, res) => {
+  try {
+    const projectName = req.body.project || 'project-1';
+    const { path: filePath, content = '' } = req.body;
+    const fullPath = path.join(PROJECTS_DIR, projectName, filePath);
+    
+    if (!fullPath.startsWith(PROJECTS_DIR)) {
+      return res.status(403).json({ success: false, error: 'Invalid path' });
+    }
+    
+    // 确保目录存在
+    const dir = path.dirname(fullPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    await fs.promises.writeFile(fullPath, content || '', 'utf-8');
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to create file' });
+  }
+});
+
+// 删除文件/文件夹 API
+app.delete('/api/item', async (req, res) => {
+  try {
+    const projectName = req.query.project as string || 'project-1';
+    const itemPath = req.query.path as string;
+    const fullPath = path.join(PROJECTS_DIR, projectName, itemPath);
+    
+    if (!fullPath.startsWith(PROJECTS_DIR)) {
+      return res.status(403).json({ success: false, error: 'Invalid path' });
+    }
+    
+    const stats = fs.statSync(fullPath);
+    if (stats.isDirectory()) {
+      await fs.promises.rm(fullPath, { recursive: true });
+    } else {
+      await fs.promises.unlink(fullPath);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to delete item' });
+  }
+});
+
+// 重命名文件/文件夹 API
+app.post('/api/rename', async (req, res) => {
+  try {
+    const projectName = req.body.project || 'project-1';
+    const { oldPath, newPath } = req.body;
+    const oldFullPath = path.join(PROJECTS_DIR, projectName, oldPath);
+    const newFullPath = path.join(PROJECTS_DIR, projectName, newPath);
+    
+    if (!oldFullPath.startsWith(PROJECTS_DIR) || !newFullPath.startsWith(PROJECTS_DIR)) {
+      return res.status(403).json({ success: false, error: 'Invalid path' });
+    }
+    
+    await fs.promises.rename(oldFullPath, newFullPath);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to rename item' });
+  }
+});
+
+// 上传文件 API
+app.post('/api/upload', upload.array('files', 10), async (req, res) => {
+  try {
+    const projectName = req.body.project || 'project-1';
+    const targetPath = req.body.path || '';
+    
+    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
+      return res.status(400).json({ success: false, error: '没有上传文件' });
+    }
+    
+    const projectDir = path.join(PROJECTS_DIR, projectName);
+    const targetDir = path.join(projectDir, targetPath);
+    
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    
+    const uploadedFiles: Array<{ name: string; path: string; size: number }> = [];
+    
+    for (const file of req.files) {
+      const destPath = path.join(targetDir, file.filename);
+      await fs.promises.rename(file.path, destPath);
+      
+      uploadedFiles.push({
+        name: file.originalname,
+        path: targetPath ? `${targetPath}/${file.filename}` : file.filename,
+        size: file.size
+      });
+    }
+    
+    console.log(`📤 文件已上传：${uploadedFiles.map(f => f.name).join(', ')}`);
+    res.json({ success: true, files: uploadedFiles });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to upload files' });
+  }
+});
+
+// 获取项目列表
+async function getProjectsList(): Promise<Array<{ name: string; path: string }>> {
+  const projects: Array<{ name: string; path: string }> = [];
+  
+  try {
+    const entries = await fs.promises.readdir(PROJECTS_DIR, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      // 排除隐藏文件夹、uploads 临时文件夹和 node_modules
+      if (entry.isDirectory() && 
+          !entry.name.startsWith('.') && 
+          entry.name !== 'uploads' && 
+          entry.name !== 'node_modules') {
+        projects.push({
+          name: entry.name,
+          path: entry.name
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error reading projects:', error);
+  }
+  
+  return projects;
+}
+
+// 递归获取文件列表
+async function getFilesRecursively(dir: string, baseDir = dir): Promise<Array<{ path: string; name: string; type: 'file' | 'folder'; children?: any[] }>> {
+  const result: any[] = [];
+
+  try {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+
+      const fullPath = path.join(dir, entry.name);
+      const relativePath = path.relative(baseDir, fullPath);
+
+      if (entry.isDirectory()) {
+        const children = await getFilesRecursively(fullPath, baseDir);
+        result.push({
+          path: relativePath,
+          name: entry.name,
+          type: 'folder' as const,
+          children
+        });
+      } else {
+        result.push({
+          path: relativePath,
+          name: entry.name,
+          type: 'file' as const
+        });
+      }
+    }
+  } catch (error) {
+    console.error(`Error reading directory ${dir}:`, error);
+  }
+
+  return result;
+}
+
+// 初始化项目结构
+function initializeProjectStructure() {
+  const projectDir = path.join(PROJECTS_DIR, 'project-1');
+  
+  if (!fs.existsSync(projectDir)) {
+    // 创建项目目录
+    fs.mkdirSync(projectDir, { recursive: true });
+    
+    // 创建基础文件夹
+    fs.mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'js'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'css'), { recursive: true });
+    
+    // 创建默认 index.html
+    const defaultHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的项目</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <h1>欢迎来到我的项目</h1>
+    <p>这是一个由 AI Product Manager 创建的项目</p>
+  </div>
+  <script src="js/app.js"></script>
+</body>
+</html>`;
+    
+    fs.writeFileSync(path.join(projectDir, 'index.html'), defaultHtml, 'utf-8');
+    
+    // 创建默认 CSS
+    const defaultCss = `* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  padding: 20px;
+  background: #f5f5f5;
+}
+
+#app {
+  max-width: 800px;
+  margin: 0 auto;
+  background: white;
+  padding: 40px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 20px;
+}
+
+p {
+  color: #666;
+}`;
+    
+    fs.writeFileSync(path.join(projectDir, 'css', 'style.css'), defaultCss, 'utf-8');
+    
+    // 创建默认 JS
+    const defaultJs = `// 应用入口
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('应用已加载');
+  
+  // 在这里添加你的交互逻辑
+  const app = document.getElementById('app');
+  if (app) {
+    console.log('App 元素:', app);
+  }
+});`;
+    
+    fs.writeFileSync(path.join(projectDir, 'js', 'app.js'), defaultJs, 'utf-8');
+    
+    console.log('✅ 项目结构已初始化：project-1');
+  }
+}
+
+// 启动 HTTP 服务
+const server = app.listen(PORT, () => {
+  console.log(`📡 HTTP Server running on http://localhost:${PORT}`);
+  initializeProjectStructure();
+});
+
+// 启动 WebSocket 服务用于热更新和终端
+const wss = new WebSocketServer({ port: WS_PORT });
+
+wss.on('connection', (ws, req) => {
+  console.log('🔌 Client connected to WebSocket');
+
+  const url = new URL(req.url || '', `ws://localhost:${WS_PORT}`);
+  const sessionId = url.searchParams.get('session') || `default-${Date.now()}`;
+
+  // 处理终端会话
+  if (url.searchParams.has('terminal')) {
+    const cwd = url.searchParams.get('cwd') || PROJECTS_DIR;
+
+    try {
+      // 使用 node-pty 创建真正的伪终端 - 使用 PowerShell
+      const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
+      const args = process.platform === 'win32'
+        ? ['-NoExit', '-NoProfile', '-Command', `Set-Location "${cwd.replace(/"/g, '`"')}"`]
+        : [];
+
+      console.log(`📌 Spawning terminal: ${shell} ${args.join(' ')} (cwd: ${cwd})`);
+
+      const ptyProcess = pty.spawn(shell, args, {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 30,
+        cwd,
+        env: { ...process.env }
+      });
+
+      terminalSessions.set(sessionId, ptyProcess);
+      console.log(`✅ Terminal session ${sessionId} created, PID: ${ptyProcess.pid}`);
+
+      // 终端输出 → 前端
+      ptyProcess.onData((data: string) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'terminal-data',
+            session: sessionId,
+            data
+          }));
+        }
+      });
+
+      ptyProcess.onExit(({ exitCode, signal }: { exitCode: number | null, signal: number | null }) => {
+        console.log(`🚪 Terminal exited: ${exitCode}, signal: ${signal}`);
+        terminalSessions.delete(sessionId);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'terminal-exit',
+            session: sessionId,
+            exitCode,
+            signal
+          }));
+        }
+      });
+
+      // 前端输入 → 终端
+      ws.on('message', (message) => {
+        try {
+          const msg = JSON.parse(message.toString());
+
+          if (msg.type === 'terminal-input' && msg.session === sessionId) {
+            ptyProcess.write(msg.data);
+          }
+
+          if (msg.type === 'terminal-resize' && msg.session === sessionId) {
+            ptyProcess.resize(msg.cols, msg.rows);
+          }
+        } catch (error) {
+          console.error('Error handling terminal message:', error);
+        }
+      });
+
+      ws.on('close', () => {
+        console.log(`🔌 Terminal session ${sessionId} closed`);
+        try {
+          ptyProcess.kill();
+        } catch (error) {
+          console.error('Error killing pty process:', error);
+        }
+        terminalSessions.delete(sessionId);
+      });
+
+      ws.on('error', (error) => {
+        console.error(`WebSocket error for session ${sessionId}:`, error);
+      });
+
+      // 发送欢迎消息
+      ws.send(JSON.stringify({
+        type: 'terminal-ready',
+        session: sessionId
+      }));
+
+      return;
+    } catch (error) {
+      console.error('❌ Failed to spawn terminal:', error);
+      ws.send(JSON.stringify({
+        type: 'terminal-error',
+        session: sessionId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }));
+      return;
+    }
+  }
+
+  // 文件热更新 WebSocket
+  // 监听 projects 文件夹变化
+  const watcher = chokidar.watch(PROJECTS_DIR, {
+    ignored: /node_modules|[\/\\]\./,
+    persistent: true,
+    ignoreInitial: true
+  });
+
+  watcher.on('change', (filePath) => {
+    const relativePath = path.relative(PROJECTS_DIR, filePath);
+    console.log(`📝 File changed: ${relativePath}`);
+    ws.send(JSON.stringify({
+      type: 'file-change',
+      path: relativePath,
+      timestamp: Date.now()
+    }));
+  });
+
+  watcher.on('add', (filePath) => {
+    const relativePath = path.relative(PROJECTS_DIR, filePath);
+    console.log(`📄 File added: ${relativePath}`);
+    ws.send(JSON.stringify({
+      type: 'file-add',
+      path: relativePath,
+      timestamp: Date.now()
+    }));
+  });
+
+  watcher.on('unlink', (filePath) => {
+    const relativePath = path.relative(PROJECTS_DIR, filePath);
+    console.log(`🗑️ File deleted: ${relativePath}`);
+    ws.send(JSON.stringify({
+      type: 'file-delete',
+      path: relativePath,
+      timestamp: Date.now()
+    }));
+  });
+
+  ws.on('close', () => {
+    console.log('🔌 Client disconnected');
+    watcher.close();
+  });
+});
+
+console.log(`🔌 WebSocket Server running on ws://localhost:${WS_PORT}`);

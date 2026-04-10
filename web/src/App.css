@@ -1,0 +1,867 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background: #f0f0f0;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+}
+
+/* 顶部容器 - 左侧面板 + 右侧渲染区 */
+.panel-top-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 底部终端 - 通长横幅 */
+.panel-terminal-bottom {
+  height: 250px;
+  min-height: 250px;
+  background: #0c0c0c;
+  border-top: 1px solid #333;
+}
+
+/* 左侧面板容器 - 带侧边栏 */
+.panel-left-container {
+  display: flex;
+  width: 400px;
+  min-width: 400px;
+  background: #2d2d30;
+  border-right: 1px solid #3e3e42;
+}
+
+/* 侧边栏选项卡 */
+.sidebar-tabs {
+  width: 50px;
+  min-width: 50px;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  border-right: 1px solid #3e3e42;
+  padding: 8px 4px;
+}
+
+.tab-btn {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: #888;
+}
+
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.tab-btn.active {
+  background: #0e639c;
+  color: #fff;
+}
+
+/* 左侧内容区 */
+.panel-left-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.panel-section {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  overflow: hidden;
+}
+
+.panel-section.active {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 完整高度文件管理器 */
+.panel-file-manager-full {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #252526;
+}
+
+/* 中间和右侧面板容器 */
+.panel-right-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 核心渲染区域 */
+.panel-render {
+  flex: 1;
+  background: #95f204;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.render-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.render-frame-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+}
+
+.iframe-wrapper {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* 文件管理系统 */
+.panel-file-manager {
+  width: 331px;
+  min-width: 331px;
+  background: #facd91;
+  border-right: 1px solid #797979;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 项目选择器 */
+.project-selector {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #797979;
+  background: rgba(255, 255, 255, 0.5);
+  gap: 8px;
+}
+
+.project-selector label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.project-selector select {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #797979;
+  border-radius: 4px;
+  background: white;
+  color: #333;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.project-selector select:hover {
+  border-color: #555;
+}
+
+.project-selector .btn-new-project,
+.project-selector .btn-delete-project {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  color: #cccccc;
+}
+
+.project-selector .btn-new-project:hover {
+  background: rgba(76, 175, 80, 0.2);
+}
+
+.project-selector .btn-delete-project:hover {
+  background: rgba(244, 67, 54, 0.2);
+}
+
+.panel-file-manager .file-tree {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-file-manager .file-tree-content {
+  flex: 1;
+  overflow: auto;
+}
+
+/* 页面 UI 选择系统 */
+.panel-ui-selector {
+  flex: 1;
+  background: #ec808d;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-ui-selector .ui-selector-display {
+  flex: 1;
+  overflow: auto;
+}
+
+/* 页面 UI 选择系统 - 全屏模式 */
+.panel-ui-selector-full {
+  flex: 1;
+  background: #ec808d;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.panel-ui-selector-full .panel-header {
+  flex-shrink: 0;
+}
+
+.panel-ui-selector-full .ui-selector-display {
+  flex: 1;
+  overflow: auto;
+}
+
+/* 文件树样式 - 暗色主题 */
+.file-tree {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  background: #252526;
+}
+
+.file-tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid #3e3e42;
+  background: #2d2d30;
+  flex-shrink: 0;
+}
+
+.file-tree-title {
+  color: #cccccc;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.file-tree-refresh {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  color: #cccccc;
+}
+
+.file-tree-refresh:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.file-tree-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.file-tree-add {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  color: #cccccc;
+}
+
+.file-tree-add:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 右键菜单 */
+.context-menu {
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  padding: 4px 0;
+  min-width: 150px;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  transition: background 0.15s;
+}
+
+.context-menu button:hover {
+  background: #f0f0f0;
+}
+
+.context-menu button.danger {
+  color: #d32f2f;
+}
+
+.context-menu button.danger:hover {
+  background: #ffebee;
+}
+
+.file-tree-empty {
+  padding: 20px;
+  text-align: center;
+  color: #666;
+}
+
+.file-tree-empty .hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 8px;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 320px;
+  max-width: 480px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.modal-body {
+  margin-bottom: 20px;
+}
+
+.modal-body label {
+  display: block;
+  margin-bottom: 8px;
+  color: #555;
+  font-size: 14px;
+}
+
+.modal-body input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.modal-body input:focus {
+  outline: none;
+  border-color: #2196F3;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.modal-footer button {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.modal-footer .btn-cancel {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.modal-footer .btn-cancel:hover {
+  background: #e0e0e0;
+}
+
+.modal-footer .btn-confirm {
+  background: #4CAF50;
+  color: white;
+}
+
+.modal-footer .btn-confirm:hover {
+  background: #45a049;
+}
+
+/* 上传指示器 */
+.uploading-indicator {
+  margin-left: 8px;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.file-tree-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  background: transparent;
+}
+
+.file-tree-loading,
+.file-tree-error {
+  padding: 16px;
+  text-align: center;
+  color: #888;
+}
+
+.file-tree-error {
+  color: #f48771;
+}
+
+.file-tree-node {
+  user-select: none;
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  cursor: pointer;
+  color: #cccccc;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.file-tree-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.file-tree-item.selected {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.file-tree-icon {
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.file-tree-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-children {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* 渲染区域样式 */
+.render-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.render-frame-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #797979;
+  background: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.render-frame-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.render-frame-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.ui-selector-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.ui-selector-toggle:hover {
+  background: #e8e8e8;
+}
+
+.ui-selector-toggle input {
+  cursor: pointer;
+}
+
+.render-frame-title {
+  color: #333;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.render-frame-status {
+  font-size: 12px;
+  color: #333;
+}
+
+.render-frame-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.iframe-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.iframe-container iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #ffffff;
+}
+
+.render-frame-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  background: #f8f8f8;
+}
+
+.empty-state {
+  text-align: center;
+  color: #888;
+}
+
+.empty-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.render-frame-error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: #f48771;
+  background: #fff5f5;
+}
+
+/* 终端样式 */
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #333;
+  background: #2d2d30;
+}
+
+.terminal-title {
+  color: #cccccc;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.terminal-subtitle {
+  color: #888;
+  font-size: 12px;
+}
+
+.terminal-content {
+  flex: 1;
+  padding: 8px;
+  overflow: hidden;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4f4f4f;
+}
+
+/* 面板头部 */
+.panel-header {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px;
+  border-bottom: 1px solid #797979;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.panel-subtitle {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* UI 选择器显示区域 */
+.ui-selector-display {
+  padding: 16px;
+  height: 100%;
+  overflow: auto;
+}
+
+.ui-selector-display.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.ui-info-header {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ui-info-tag,
+.ui-info-id {
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ui-info-tag {
+  background: #4CAF50;
+}
+
+.ui-info-id {
+  background: #2196F3;
+}
+
+.ui-info-section {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.ui-info-section .label {
+  color: #666;
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+.ui-info-section .value {
+  color: #333;
+}
+
+.ui-info-section .value.classes {
+  color: #1976D2;
+  word-break: break-all;
+}
+
+.ui-info-section .value.path {
+  color: #7B1FA2;
+  word-break: break-all;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+}
+
+/* 完整高度终端样式 - Windows CMD 风格 */
+/* 终端样式 - 底部横幅模式 */
+.terminal-container-full {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0c0c0c;
+}
+
+.terminal-header-full {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4px 16px;
+  border-bottom: 1px solid #333;
+  background: #0c0c0c;
+  flex-shrink: 0;
+}
+
+.terminal-title {
+  color: #cccccc;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: 'Consolas', monospace;
+}
+
+.terminal-subtitle {
+  color: #666;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.terminal-content-full {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.terminal-content-full .xterm {
+  padding: 4px 8px;
+  height: 100%;
+}
+
+.terminal-content-full .xterm-viewport {
+  background-color: #0c0c0c;
+  height: 100% !important;
+}
+
+/* 终端文字排版：自动换行 + 左对齐 */
+.terminal-content-full .xterm {
+  text-align: left;
+}
+
+.terminal-content-full .xterm .xterm-screen {
+  text-align: left;
+}
+
+.terminal-content-full .xterm .xterm-rows > div {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+/* 项目选择器 - 暗色主题 */
+.panel-file-manager-full .project-selector {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #3e3e42;
+  background: #2d2d30;
+  gap: 8px;
+}
+
+.panel-file-manager-full .project-selector label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.panel-file-manager-full .project-selector select {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  background: #1e1e1e;
+  color: #cccccc;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.panel-file-manager-full .project-selector select:hover {
+  border-color: #555;
+}
+
+.panel-file-manager-full .project-selector select option {
+  background: #2d2d30;
+  color: #cccccc;
+}

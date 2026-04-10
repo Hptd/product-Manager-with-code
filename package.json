@@ -1,0 +1,20 @@
+{
+  "name": "ai-product-manager",
+  "version": "0.1.0",
+  "description": "AI 对话驱动的产品管理系统",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:web": "cd web && npm run dev",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "cd web && npm run build",
+    "build:server": "cd server && npm run build",
+    "start": "cd server && npm start"
+  },
+  "keywords": ["ai", "product-manager", "prototype"],
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
