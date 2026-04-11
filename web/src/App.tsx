@@ -23,6 +23,13 @@ function App() {
     loadProjects();
   }, []);
 
+  // 当项目列表为空时，自动打开创建项目对话框
+  useEffect(() => {
+    if (projects.length === 0 && !showNewProjectModal) {
+      setShowNewProjectModal(true);
+    }
+  }, [projects]);
+
   const loadProjects = async () => {
     const data = await api.getProjects();
     setProjects(data);
@@ -49,21 +56,22 @@ function App() {
   };
 
   const handleDeleteProject = async () => {
-    if (projects.length <= 1) {
-      alert('至少需要保留一个项目');
-      return;
-    }
-
     if (!confirm(`确定要删除项目 "${selectedProject}" 吗？此操作不可撤销！`)) {
       return;
     }
 
     try {
-      await api.deleteProject(selectedProject);
+      const projectToDelete = selectedProject;
+      // 先找到要切换到的项目（如果有其他项目）
+      const nextProject = projects.find(p => p.name !== projectToDelete);
+
+      await api.deleteProject(projectToDelete);
       await loadProjects();
-      setSelectedProject(projects.find(p => p.name !== selectedProject)?.name || '');
-    } catch (error) {
-      alert('删除项目失败');
+      // 切换到其他项目，或清空选择（引导用户创建新项目）
+      setSelectedProject(nextProject?.name || '');
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || '删除项目失败';
+      alert(`删除项目失败：${errorMsg}`);
     }
   };
 
@@ -130,34 +138,47 @@ function App() {
             {/* 文件管理面板 */}
             <div className={`panel-section ${leftPanelTab === 'files' ? 'active' : ''}`}>
               <div className="panel-file-manager-full">
-                <div className="project-selector">
-                  <label>项目:</label>
-                  <select
-                    value={selectedProject}
-                    onChange={(e) => {
-                      setSelectedProject(e.target.value);
-                      setSelectedPath('');
-                      setFileContent('');
-                    }}
-                  >
-                    {projects.map((project) => (
-                      <option key={project.name} value={project.name}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button className="btn-new-project" onClick={() => setShowNewProjectModal(true)} title="新建项目">
-                    ➕
-                  </button>
-                  <button className="btn-delete-project" onClick={handleDeleteProject} title="删除当前项目">
-                    🗑️
-                  </button>
-                </div>
-                <FileTree
-                  projectName={selectedProject}
-                  onSelectFile={handleSelectFile}
-                  selectedPath={selectedPath}
-                />
+                {projects.length === 0 ? (
+                  <div className="empty-project-state">
+                    <div className="empty-icon">📁</div>
+                    <h3>暂无项目</h3>
+                    <p>请先创建一个新项目以开始使用</p>
+                    <button className="btn-create-project-primary" onClick={() => setShowNewProjectModal(true)}>
+                      ➕ 创建新项目
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="project-selector">
+                      <label>项目:</label>
+                      <select
+                        value={selectedProject}
+                        onChange={(e) => {
+                          setSelectedProject(e.target.value);
+                          setSelectedPath('');
+                          setFileContent('');
+                        }}
+                      >
+                        {projects.map((project) => (
+                          <option key={project.name} value={project.name}>
+                            {project.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn-new-project" onClick={() => setShowNewProjectModal(true)} title="新建项目">
+                        ➕
+                      </button>
+                      <button className="btn-delete-project" onClick={handleDeleteProject} title="删除当前项目">
+                        🗑️
+                      </button>
+                    </div>
+                    <FileTree
+                      projectName={selectedProject}
+                      onSelectFile={handleSelectFile}
+                      selectedPath={selectedPath}
+                    />
+                  </>
+                )}
               </div>
             </div>
 

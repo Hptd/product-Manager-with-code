@@ -1,0 +1,138 @@
+/* RenderFrame 组件样式 */
+
+.render-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.render-frame-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #797979;
+  background: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.render-frame-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.render-frame-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.render-frame-title {
+  color: #333;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.render-frame-status {
+  color: #333;
+  font-size: 12px;
+}
+
+/* UI 选择器开关 */
+.ui-selector-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.ui-selector-toggle:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.ui-selector-toggle input {
+  cursor: pointer;
+}
+
+/* 视图模式切换按钮 */
+.view-mode-toggle {
+  background: #0e639c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.view-mode-toggle:hover {
+  background: #1177bb;
+}
+
+/* 渲染内容区 */
+.render-frame-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.iframe-wrapper {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.iframe-wrapper iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+/* 代码编辑模式 - 填充满整个区域 */
+.render-frame-content .code-editor {
+  flex: 1;
+  height: 100%;
+  width: 100%;
+}
+
+/* 空状态 */
+.render-frame-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  background: #f8f8f8;
+}
+
+.empty-state {
+  text-align: center;
+  color: #888;
+}
+
+.empty-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 16px;
+}
+
+/* 错误状态 */
+.render-frame-error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: #f48771;
+  background: #fff5f5;
+}

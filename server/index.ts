@@ -63,43 +63,76 @@ app.get('/api/projects', async (req, res) => {
 app.post('/api/projects', async (req, res) => {
   try {
     const { name } = req.body;
-    
+
     if (!name || name.trim() === '') {
       return res.status(400).json({ success: false, error: '项目名称不能为空' });
     }
-    
+
     const projectDir = path.join(PROJECTS_DIR, name);
-    
+
     if (fs.existsSync(projectDir)) {
       return res.status(400).json({ success: false, error: '项目已存在' });
     }
-    
-    // 创建项目目录结构
+
+    // 创建项目目录结构 - 仅保留 assets 文件夹
     fs.mkdirSync(projectDir, { recursive: true });
     fs.mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
-    fs.mkdirSync(path.join(projectDir, 'js'), { recursive: true });
-    fs.mkdirSync(path.join(projectDir, 'css'), { recursive: true });
-    
-    // 创建默认 index.html
+
+    // 创建默认 index.html（不引用外部 CSS/JS）
     const defaultHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${name}</title>
-  <link rel="stylesheet" href="css/style.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    #app {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    
+    p {
+      color: #666;
+    }
+  </style>
 </head>
 <body>
   <div id="app">
     <h1>欢迎来到 ${name}</h1>
     <p>这是一个新创建的项目</p>
+    <p>你可以在 <code>assets</code> 文件夹中添加图片、字体等资源文件</p>
   </div>
-  <script src="js/app.js"></script>
+  <script>
+    // 在这里添加你的 JavaScript 代码
+    console.log('${name} 已加载');
+  </script>
 </body>
 </html>`;
-    
+
     fs.writeFileSync(path.join(projectDir, 'index.html'), defaultHtml, 'utf-8');
-    
+
     console.log(`✅ 新项目已创建：${name}`);
     res.json({ success: true, project: { name, path: name } });
   } catch (error) {
@@ -107,21 +140,100 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
+// 存储每个 WebSocket 连接的文件监听器
+const wsWatchers = new Map<WebSocket, chokidar.FSWatcher>();
+
 // 删除项目 API
 app.delete('/api/projects/:projectName', async (req, res) => {
   try {
     const { projectName } = req.params;
     const projectDir = path.join(PROJECTS_DIR, projectName);
-    
+
     if (!fs.existsSync(projectDir)) {
       return res.status(404).json({ success: false, error: '项目不存在' });
     }
-    
-    await fs.promises.rm(projectDir, { recursive: true });
+
+    // 临时关闭所有文件监听器（因为它们可能锁定了文件）
+    const closedWatchers: Array<{ws: WebSocket, watcher: chokidar.FSWatcher}> = [];
+    for (const [ws, watcher] of wsWatchers.entries()) {
+      await watcher.close();
+      closedWatchers.push({ ws, watcher });
+      console.log(`🔍 已关闭 WebSocket 文件监听器`);
+    }
+
+    // 等待 watcher 完全释放文件句柄
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Windows 下尝试强制删除，如遇占用则重试
+    let retries = 3;
+    let deleted = false;
+    while (retries > 0 && !deleted) {
+      try {
+        await fs.promises.rm(projectDir, { recursive: true, force: true, maxRetries: 3 });
+        deleted = true;
+      } catch (err: any) {
+        if (err.code === 'EBUSY' || err.code === 'EPERM') {
+          retries--;
+          if (retries > 0) {
+            console.log(`⚠️ 文件被占用，重试中... (${retries}/3)`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } else {
+            throw new Error('文件被占用，请关闭占用该项目的程序后重试（如终端、资源管理器等）');
+          }
+        } else {
+          throw err;
+        }
+      }
+    }
+
     console.log(`🗑️ 项目已删除：${projectName}`);
+
+    // 重新建立文件监听器
+    for (const { ws, watcher } of closedWatchers) {
+      // 重新监听（chokidar watcher 关闭后不能重用，需要重新创建）
+      const newWatcher = chokidar.watch(PROJECTS_DIR, {
+        ignored: /node_modules|[\/\\]\./,
+        persistent: true,
+        ignoreInitial: true
+      });
+
+      newWatcher.on('change', (filePath) => {
+        const relativePath = path.relative(PROJECTS_DIR, filePath);
+        ws.send(JSON.stringify({
+          type: 'file-change',
+          path: relativePath,
+          timestamp: Date.now()
+        }));
+      });
+
+      newWatcher.on('add', (filePath) => {
+        const relativePath = path.relative(PROJECTS_DIR, filePath);
+        ws.send(JSON.stringify({
+          type: 'file-add',
+          path: relativePath,
+          timestamp: Date.now()
+        }));
+      });
+
+      newWatcher.on('unlink', (filePath) => {
+        const relativePath = path.relative(PROJECTS_DIR, filePath);
+        ws.send(JSON.stringify({
+          type: 'file-delete',
+          path: relativePath,
+          timestamp: Date.now()
+        }));
+      });
+
+      wsWatchers.set(ws, newWatcher);
+    }
+
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to delete project' });
+    console.error('删除项目失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete project'
+    });
   }
 });
 
@@ -370,84 +482,73 @@ async function getFilesRecursively(dir: string, baseDir = dir): Promise<Array<{ 
 // 初始化项目结构
 function initializeProjectStructure() {
   const projectDir = path.join(PROJECTS_DIR, 'project-1');
-  
+
   if (!fs.existsSync(projectDir)) {
-    // 创建项目目录
+    // 创建项目目录 - 仅保留 assets 文件夹
     fs.mkdirSync(projectDir, { recursive: true });
-    
-    // 创建基础文件夹
     fs.mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
-    fs.mkdirSync(path.join(projectDir, 'js'), { recursive: true });
-    fs.mkdirSync(path.join(projectDir, 'css'), { recursive: true });
-    
-    // 创建默认 index.html
+
+    // 创建默认 index.html（内联样式和脚本）
     const defaultHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的项目</title>
-  <link rel="stylesheet" href="css/style.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    #app {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    
+    p {
+      color: #666;
+    }
+  </style>
 </head>
 <body>
   <div id="app">
     <h1>欢迎来到我的项目</h1>
     <p>这是一个由 AI Product Manager 创建的项目</p>
+    <p>你可以在 <code>assets</code> 文件夹中添加图片、字体等资源文件</p>
   </div>
-  <script src="js/app.js"></script>
+  <script>
+    // 应用入口
+    console.log('应用已加载');
+    
+    // 在这里添加你的交互逻辑
+    const app = document.getElementById('app');
+    if (app) {
+      console.log('App 元素:', app);
+    }
+  </script>
 </body>
 </html>`;
-    
+
     fs.writeFileSync(path.join(projectDir, 'index.html'), defaultHtml, 'utf-8');
-    
-    // 创建默认 CSS
-    const defaultCss = `* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.6;
-  padding: 20px;
-  background: #f5f5f5;
-}
-
-#app {
-  max-width: 800px;
-  margin: 0 auto;
-  background: white;
-  padding: 40px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-h1 {
-  color: #333;
-  margin-bottom: 20px;
-}
-
-p {
-  color: #666;
-}`;
-    
-    fs.writeFileSync(path.join(projectDir, 'css', 'style.css'), defaultCss, 'utf-8');
-    
-    // 创建默认 JS
-    const defaultJs = `// 应用入口
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('应用已加载');
-  
-  // 在这里添加你的交互逻辑
-  const app = document.getElementById('app');
-  if (app) {
-    console.log('App 元素:', app);
-  }
-});`;
-    
-    fs.writeFileSync(path.join(projectDir, 'js', 'app.js'), defaultJs, 'utf-8');
-    
     console.log('✅ 项目结构已初始化：project-1');
   }
 }
@@ -572,6 +673,9 @@ wss.on('connection', (ws, req) => {
     ignoreInitial: true
   });
 
+  // 存储监听器到 Map 中
+  wsWatchers.set(ws, watcher);
+
   watcher.on('change', (filePath) => {
     const relativePath = path.relative(PROJECTS_DIR, filePath);
     console.log(`📝 File changed: ${relativePath}`);
@@ -604,7 +708,11 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     console.log('🔌 Client disconnected');
-    watcher.close();
+    const watcher = wsWatchers.get(ws);
+    if (watcher) {
+      watcher.close();
+      wsWatchers.delete(ws);
+    }
   });
 });
 

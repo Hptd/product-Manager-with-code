@@ -1,0 +1,176 @@
+/* 代码编辑器容器 */
+.code-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #1e1e1e;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* 编辑器头部 */
+.code-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #cccccc;
+  font-size: 13px;
+}
+
+.file-icon {
+  font-size: 16px;
+}
+
+.file-path {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 400px;
+}
+
+.modified-indicator {
+  color: #e74856;
+  font-size: 12px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-save {
+  background: #0e639c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-save:hover:not(:disabled) {
+  background: #1177bb;
+}
+
+.btn-save:disabled {
+  background: #3e3e42;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.save-success {
+  color: #4caf50;
+  font-size: 12px;
+  animation: fadeInOut 2s;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 编辑器主体 */
+.code-editor-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.line-numbers {
+  background: #252526;
+  color: #858585;
+  padding: 10px 8px;
+  text-align: right;
+  overflow: hidden;
+  user-select: none;
+  min-width: 50px;
+  border-right: 1px solid #3e3e42;
+}
+
+.line-number {
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.code-textarea {
+  flex: 1;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: none;
+  outline: none;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: 'Consolas', 'Courier New', monospace;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+}
+
+.code-textarea::placeholder {
+  color: #6a6a6a;
+}
+
+/* 编辑器底部状态栏 */
+.code-editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px;
+  background: #007acc;
+  color: #fff;
+  font-size: 11px;
+}
+
+.status-info {
+  opacity: 0.9;
+}
+
+.file-type-badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+/* 语法高亮（基础版） */
+.code-textarea {
+  color: #d4d4d4;
+}
+
+/* HTML 标签颜色 */
+.code-textarea[data-language="html"] {
+  color: #569cd6;
+}
+
+/* CSS 属性颜色 */
+.code-textarea[data-language="css"] {
+  color: #9cdcfe;
+}
+
+/* JS 关键字颜色 */
+.code-textarea[data-language="js"] {
+  color: #569cd6;
+}

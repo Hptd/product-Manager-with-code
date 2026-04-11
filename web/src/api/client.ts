@@ -100,6 +100,15 @@ export const api = {
     return response.data.files;
   },
 
+  // 保存文件内容（简化版）
+  async saveFileContent(projectName: string, filePath: string, content: string): Promise<void> {
+    await axios.post(`${API_BASE_URL}/file`, {
+      project: projectName,
+      path: filePath,
+      content
+    });
+  },
+
   // 创建项目
   async createProject(name: string): Promise<Project> {
     const response = await axios.post(`${API_BASE_URL}/projects`, { name });

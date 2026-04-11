@@ -865,3 +865,56 @@ html, body, #root {
   background: #2d2d30;
   color: #cccccc;
 }
+
+/* 空项目状态 */
+.empty-project-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: #252526;
+  color: #cccccc;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.empty-project-state .empty-icon {
+  font-size: 64px;
+  margin-bottom: 24px;
+  opacity: 0.5;
+}
+
+.empty-project-state h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #ffffff;
+}
+
+.empty-project-state p {
+  font-size: 14px;
+  color: #888;
+  margin-bottom: 24px;
+}
+
+.btn-create-project-primary {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  background: #4CAF50;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-create-project-primary:hover {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
