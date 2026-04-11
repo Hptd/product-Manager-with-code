@@ -2,18 +2,22 @@ import { useState, useEffect } from 'react';
 import { FileTree } from './components/FileTree';
 import { RenderFrame } from './components/RenderFrame';
 import { Terminal } from './components/Terminal';
-import { UISelectorDisplay, type UISelectorInfo } from './components/UISelectorOverlay';
+import { ModeSelector, UISelectorDisplay } from './components/UISelectorComponents';
+import { type UISelectorInfo, type UIIntent } from './components/UISelector';
 import { api, type Project } from './api/client';
+import { copyIntentToClipboard } from './components/UISelectorComponents';
+import './components/UISelector.css';
 import './App.css';
 
-type LeftPanelTab = 'files' | 'ui';
+type LeftPanelTab = 'files' | 'ui' | 'terminal';
 
 function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('project-1');
   const [selectedPath, setSelectedPath] = useState<string>('');
   const [fileContent, setFileContent] = useState<string>('');
-  const [lastIntent, setLastIntent] = useState<UISelectorInfo | null>(null);
+  const [lastIntent, setLastIntent] = useState<UIIntent | null>(null);
+  const [lastElementInfo, setLastElementInfo] = useState<UISelectorInfo | null>(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [leftPanelTab, setLeftPanelTab] = useState<LeftPanelTab>('files');
@@ -104,9 +108,25 @@ function App() {
     }
   };
 
-  const handleIntent = (intent: UISelectorInfo) => {
-    console.log('🎯 捕获 UI 选择:', intent);
+  const handleElementSelect = (info: UISelectorInfo) => {
+    console.log('🎯 元素选择:', info);
+    setLastElementInfo(info);
+  };
+
+  const handleIntentGenerate = (intent: UIIntent) => {
+    console.log('🔄 生成 Intent:', intent);
     setLastIntent(intent);
+  };
+
+  const handleCopyIntent = async () => {
+    if (lastIntent) {
+      const success = await copyIntentToClipboard(lastIntent);
+      if (success) {
+        alert('✅ Intent 已复制到剪贴板');
+      } else {
+        alert('❌ 复制失败，请手动复制');
+      }
+    }
   };
 
   return (
@@ -130,6 +150,13 @@ function App() {
               title="UI 选择系统"
             >
               🎯
+            </button>
+            <button
+              className={`tab-btn ${leftPanelTab === 'terminal' ? 'active' : ''}`}
+              onClick={() => setLeftPanelTab('terminal')}
+              title="终端"
+            >
+              💻
             </button>
           </div>
 
@@ -187,9 +214,20 @@ function App() {
               <div className="panel-ui-selector-full">
                 <div className="panel-header">
                   <h3>🎯 页面 UI 选择系统</h3>
-                  <span className="panel-subtitle">鼠标与页面的选中系统 | 页面交互系统</span>
+                  <span className="panel-subtitle">基于 ai-ui-runtime 设计理念 | 选择·移动·缩放·描述</span>
                 </div>
-                <UISelectorDisplay info={lastIntent} />
+                <UISelectorDisplay
+                  info={lastElementInfo}
+                  intent={lastIntent}
+                  onCopyIntent={handleCopyIntent}
+                />
+              </div>
+            </div>
+
+            {/* 终端面板 */}
+            <div className={`panel-section ${leftPanelTab === 'terminal' ? 'active' : ''}`}>
+              <div className="panel-terminal-full">
+                <Terminal cwd={`F:\\js-vue-project\\productManager\\axure\\projects\\${selectedProject}`} />
               </div>
             </div>
           </div>
@@ -203,15 +241,11 @@ function App() {
               filePath={selectedPath}
               fileContent={fileContent}
               onFileChange={handleFileChange}
-              onElementSelect={handleIntent}
+              onElementSelect={handleElementSelect}
+              onIntentGenerate={handleIntentGenerate}
             />
           </div>
         </div>
-      </div>
-
-      {/* 底部终端 - 通长横幅 */}
-      <div className="panel-terminal-bottom">
-        <Terminal cwd={`F:\\js-vue-project\\productManager\\axure\\projects\\${selectedProject}`} />
       </div>
 
       {/* 新建项目模态框 */}

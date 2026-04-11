@@ -15,18 +15,22 @@
   border-bottom: 1px solid #797979;
   background: rgba(255, 255, 255, 0.3);
   flex-shrink: 0;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .render-frame-header-left {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .render-frame-header-right {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .render-frame-title {
@@ -51,6 +55,7 @@
   padding: 4px 8px;
   border-radius: 4px;
   transition: background 0.2s;
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .ui-selector-toggle:hover {

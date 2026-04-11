@@ -1,5 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
-import { UISelectorOverlay, type UISelectorInfo } from './UISelectorOverlay';
+import { UISelectorOverlay, type UISelectorInfo, type SelectorMode, type UIIntent, type HoverElementInfo } from './UISelector';
+import { ModeSelector, UISelectorDisplay } from './UISelectorComponents';
+import { HoverTooltip, StatusBar } from './UISelectorTooltip';
 import { CodeEditor } from './CodeEditor';
 import { api } from '../api/client';
 import './RenderFrame.css';
@@ -9,17 +11,20 @@ interface RenderFrameProps {
   fileContent?: string;
   onFileChange?: (path: string) => void;
   onElementSelect?: (info: UISelectorInfo) => void;
+  onIntentGenerate?: (intent: UIIntent) => void;
 }
 
 type ViewMode = 'preview' | 'code';
 type FileType = 'html' | 'css' | 'js' | 'json' | 'text' | 'unknown';
 
-export function RenderFrame({ filePath, fileContent, onFileChange, onElementSelect }: RenderFrameProps) {
+export function RenderFrame({ filePath, fileContent, onFileChange, onElementSelect, onIntentGenerate }: RenderFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [uiSelectorEnabled, setUiSelectorEnabled] = useState(true);
-  
+  const [currentMode, setCurrentMode] = useState<SelectorMode>('select');
+  const [hoverElementInfo, setHoverElementInfo] = useState<HoverElementInfo | null>(null);
+
   // 新增：视图模式和编辑状态
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [currentCode, setCurrentCode] = useState<string>('');
@@ -61,13 +66,34 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
       console.log('🔌 热更新 WebSocket 已连接');
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'file-change' && filePath) {
-        // 如果变更的文件是当前显示的文件，通知父组件重新加载
-        if (data.path === filePath) {
-          console.log('📝 检测到文件变化，重新加载:', filePath);
-          onFileChange?.(filePath);
+        // 路径匹配逻辑：支持多种路径格式
+        // 后端发送的路径格式：project-1/index.html
+        // 前端 filePath 格式：index.html
+        const changedPath = data.path;
+        const currentFileName = filePath.split('/').pop() || filePath;
+        const changedFileName = changedPath.split('/').pop() || changedPath;
+        
+        // 检查是否匹配：完全匹配 或 文件名匹配
+        const isExactMatch = changedPath === filePath;
+        const isNameMatch = currentFileName === changedFileName && 
+                           changedPath.includes(filePath);
+        
+        if (isExactMatch || isNameMatch) {
+          console.log('📝 检测到文件变化，重新加载:', filePath, '变更路径:', changedPath);
+          // 直接获取最新文件内容并更新 srcDoc
+          try {
+            const projectName = changedPath.split('/')[0] || 'project-1';
+            const relativePath = changedPath.substring(projectName.length + 1);
+            const content = await api.getFileContent(projectName, relativePath);
+            setSrcDoc(content);
+            setCurrentCode(content);
+            setError(null);
+          } catch (error) {
+            console.error('热更新获取文件内容失败:', error);
+          }
         }
       }
     };
@@ -83,7 +109,7 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
     return () => {
       ws.close();
     };
-  }, [filePath, onFileChange]);
+  }, [filePath]);
 
   const handleIframeLoad = () => {
     console.log('✅ iframe 加载完成:', filePath);
@@ -138,7 +164,15 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
               {viewMode === 'preview' ? '📝 编辑代码' : '👁️ 预览'}
             </button>
           )}
-          {/* UI 选择器仅 HTML 预览模式显示 */}
+          {/* UI 选择器模式选择 - 仅 HTML 预览模式显示 */}
+          {fileType === 'html' && viewMode === 'preview' && uiSelectorEnabled && (
+            <ModeSelector
+              currentMode={currentMode}
+              onModeChange={setCurrentMode}
+              disabled={!uiSelectorEnabled}
+            />
+          )}
+          {/* UI 选择器开关 - 仅 HTML 预览模式显示 */}
           {fileType === 'html' && viewMode === 'preview' && (
             <label className="ui-selector-toggle">
               <input
@@ -180,13 +214,26 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
                 <UISelectorOverlay
                   iframeRef={iframeRef}
                   onElementSelect={onElementSelect}
+                  onElementHover={setHoverElementInfo}
+                  onIntentGenerate={onIntentGenerate}
                   enabled={uiSelectorEnabled}
+                  mode={currentMode}
                 />
+              )}
+              
+              {/* 悬停提示框 */}
+              {uiSelectorEnabled && currentMode === 'select' && (
+                <HoverTooltip info={hoverElementInfo} visible={!!hoverElementInfo} />
               )}
             </div>
           )
         )}
       </div>
+      
+      {/* 状态栏 - 显示当前悬停元素信息 */}
+      {uiSelectorEnabled && currentMode === 'select' && (
+        <StatusBar info={hoverElementInfo} mode={currentMode} />
+      )}
     </div>
   );
 }

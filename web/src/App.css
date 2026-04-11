@@ -27,21 +27,14 @@ html, body, #root {
   display: flex;
   flex: 1;
   overflow: hidden;
-}
-
-/* 底部终端 - 通长横幅 */
-.panel-terminal-bottom {
-  height: 250px;
-  min-height: 250px;
-  background: #0c0c0c;
-  border-top: 1px solid #333;
+  height: 100vh;
 }
 
 /* 左侧面板容器 - 带侧边栏 */
 .panel-left-container {
   display: flex;
-  width: 400px;
-  min-width: 400px;
+  width: 450px;
+  min-width: 450px;
   background: #2d2d30;
   border-right: 1px solid #3e3e42;
 }
@@ -917,4 +910,95 @@ html, body, #root {
   background: #45a049;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+/* 终端面板 - 全屏模式 */
+.panel-terminal-full {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0c0c0c;
+  overflow: hidden;
+}
+
+/* 终端容器 - 侧边栏模式 */
+.panel-terminal-full .terminal-container-full {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* 终端标题栏 */
+.panel-terminal-full .terminal-header-full {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #333;
+  background: #1a1a1a;
+  flex-shrink: 0;
+}
+
+.panel-terminal-full .terminal-title {
+  color: #cccccc;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: 'Consolas', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-terminal-full .terminal-subtitle {
+  color: #666;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* 终端内容区 */
+.panel-terminal-full .terminal-content-full {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+  min-width: 0;
+  width: 100%;
+}
+
+/* xterm 终端强制换行 */
+.panel-terminal-full .terminal-content-full .xterm {
+  padding: 4px 8px;
+  height: 100%;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.panel-terminal-full .terminal-content-full .xterm-viewport {
+  background-color: #0c0c0c;
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+.panel-terminal-full .terminal-content-full .xterm-rows {
+  width: 100% !important;
+}
+
+/* 强制文字换行 */
+.panel-terminal-full .terminal-content-full .xterm .xterm-screen {
+  width: 100%;
+}
+
+.panel-terminal-full .terminal-content-full .xterm .xterm-rows > div {
+  width: 100% !important;
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  word-break: break-all !important;
+  max-width: 100% !important;
+}
+
+/* 移除 xterm 的横向滚动条 */
+.panel-terminal-full .terminal-content-full .xterm .xterm-helper-textarea {
+  width: 100%;
 }

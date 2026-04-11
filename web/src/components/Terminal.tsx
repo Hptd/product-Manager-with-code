@@ -22,7 +22,7 @@ export function Terminal({ cwd }: TerminalProps) {
     const term = new XTerm({
       cursorBlink: true,
       cursorStyle: 'block',
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: 'Consolas, "Courier New", monospace',
       theme: {
         background: '#0c0c0c',
@@ -53,9 +53,10 @@ export function Terminal({ cwd }: TerminalProps) {
       drawBoldTextInBrightColors: true,
       disableStdin: false,
       allowProposedApi: true,
-      lineHeight: 1.2,
-      cols: 120,
-      rows: 30
+      lineHeight: 1.3,
+      cols: 60,
+      rows: 20,
+      rightClickSelectsWord: true
     });
 
     // 添加插件
@@ -134,17 +135,23 @@ export function Terminal({ cwd }: TerminalProps) {
 
     term.onData(onTerminalData);
 
-    // 窗口大小变化
+    // 窗口大小变化 - 使用防抖
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     const handleResize = () => {
-      fitAddon.fit();
-      if (ws.readyState === WebSocket.OPEN && terminalInstance.current) {
-        ws.send(JSON.stringify({
-          type: 'terminal-resize',
-          session: sessionId.current,
-          cols: term.cols,
-          rows: term.rows
-        }));
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
       }
+      resizeTimeout = setTimeout(() => {
+        fitAddon.fit();
+        if (ws.readyState === WebSocket.OPEN && terminalInstance.current) {
+          ws.send(JSON.stringify({
+            type: 'terminal-resize',
+            session: sessionId.current,
+            cols: term.cols,
+            rows: term.rows
+          }));
+        }
+      }, 100);
     };
 
     window.addEventListener('resize', handleResize);
@@ -153,8 +160,18 @@ export function Terminal({ cwd }: TerminalProps) {
     // 初始适配
     setTimeout(handleResize, 100);
 
+    // 使用 ResizeObserver 监听容器大小变化
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    resizeObserver.observe(terminalRef.current);
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
       if (ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
