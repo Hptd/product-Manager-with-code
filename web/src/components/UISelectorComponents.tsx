@@ -1,6 +1,34 @@
 import { useState } from 'react';
 import { type SelectorMode, type UISelectorInfo, type UIIntent } from './UISelector';
 
+// ==================== Toast 通知组件 ====================
+
+interface Toast {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+export function ToastContainer({ toasts }: { toasts: Toast[] }) {
+  return (
+    <div className="toast-container">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className={`toast-toast toast-${toast.type}`}
+        >
+          <span className="toast-icon">
+            {toast.type === 'success' && '✅'}
+            {toast.type === 'error' && '❌'}
+            {toast.type === 'info' && 'ℹ️'}
+          </span>
+          <span className="toast-message">{toast.message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ==================== 模式选择器组件 ====================
 
 export function ModeSelector({
@@ -315,6 +343,17 @@ export function UISelectorDisplay({
 }) {
   const [copyFormat, setCopyFormat] = useState<CopyFormat>('json');
   const [activeTab, setActiveTab] = useState<'info' | 'html' | 'css' | 'intent'>('info');
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // 显示 Toast 通知
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    // 2 秒后自动消失
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 2000);
+  };
 
   if (!info) {
     return (
@@ -358,7 +397,9 @@ export function UISelectorDisplay({
   const handleCopyStandard = async () => {
     const success = await copyToClipboard(standardFormatText);
     if (success) {
-      alert('✅ 已复制到剪贴板');
+      showToast('已复制标准格式');
+    } else {
+      showToast('复制失败', 'error');
     }
   };
 
@@ -366,7 +407,9 @@ export function UISelectorDisplay({
     if (info.outerHTML) {
       const success = await copyToClipboard(info.outerHTML);
       if (success) {
-        alert('✅ OuterHTML 已复制');
+        showToast('OuterHTML 已复制');
+      } else {
+        showToast('复制失败', 'error');
       }
     }
   };
@@ -375,12 +418,17 @@ export function UISelectorDisplay({
     const selector = info.cssSelector || info.selector || '';
     const success = await copyToClipboard(selector);
     if (success) {
-      alert('✅ CSS 选择器已复制：' + selector);
+      showToast(`CSS 选择器已复制`);
+    } else {
+      showToast('复制失败', 'error');
     }
   };
 
   return (
     <div className="ui-selector-display">
+      {/* Toast 通知容器 */}
+      <ToastContainer toasts={toasts} />
+
       {/* 顶部操作栏 */}
       <div className="ui-display-toolbar">
         <div className="ui-display-tabs">

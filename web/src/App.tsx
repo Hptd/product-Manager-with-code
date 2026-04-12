@@ -21,6 +21,20 @@ function App() {
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [leftPanelTab, setLeftPanelTab] = useState<LeftPanelTab>('files');
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+
+  // 点击外部关闭下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.project-dropdown-container')) {
+        setShowProjectDropdown(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   // 加载项目列表
   useEffect(() => {
@@ -28,15 +42,17 @@ function App() {
   }, []);
 
   // 当项目列表为空时，自动打开创建项目对话框
+  // 注意：必须初始化完成后且为空才弹窗，避免刷新页面时误触发
   useEffect(() => {
-    if (projects.length === 0 && !showNewProjectModal) {
+    if (isInitialized && projects.length === 0 && !showNewProjectModal) {
       setShowNewProjectModal(true);
     }
-  }, [projects]);
+  }, [projects, isInitialized, showNewProjectModal]);
 
   const loadProjects = async () => {
     const data = await api.getProjects();
     setProjects(data);
+    setIsInitialized(true);
     if (data.length > 0 && !selectedProject) {
       setSelectedProject(data[0].name);
     }
@@ -59,24 +75,35 @@ function App() {
     }
   };
 
-  const handleDeleteProject = async () => {
-    if (!confirm(`确定要删除项目 "${selectedProject}" 吗？此操作不可撤销！`)) {
+  const handleDeleteProject = async (projectName: string) => {
+    if (!confirm(`确定要删除项目 "${projectName}" 吗？此操作不可撤销！`)) {
       return;
     }
 
     try {
-      const projectToDelete = selectedProject;
-      // 先找到要切换到的项目（如果有其他项目）
-      const nextProject = projects.find(p => p.name !== projectToDelete);
+      // 先删除项目
+      await api.deleteProject(projectName);
 
-      await api.deleteProject(projectToDelete);
-      await loadProjects();
-      // 切换到其他项目，或清空选择（引导用户创建新项目）
-      setSelectedProject(nextProject?.name || '');
+      // 重新获取最新项目列表
+      const remainingProjects = await api.getProjects();
+      setProjects(remainingProjects);
+
+      // 如果删除的是当前选中的项目，切换到其他项目
+      if (selectedProject === projectName) {
+        const nextProject = remainingProjects.find(p => p.name !== projectName);
+        setSelectedProject(nextProject?.name || '');
+      }
     } catch (error: any) {
       const errorMsg = error.response?.data?.error || error.message || '删除项目失败';
       alert(`删除项目失败：${errorMsg}`);
     }
+  };
+
+  const handleSelectProject = (projectName: string) => {
+    setSelectedProject(projectName);
+    setSelectedPath('');
+    setFileContent('');
+    setShowProjectDropdown(false);
   };
 
   const handleSelectFile = async (path: string) => {
@@ -178,25 +205,54 @@ function App() {
                   <>
                     <div className="project-selector">
                       <label>项目:</label>
-                      <select
-                        value={selectedProject}
-                        onChange={(e) => {
-                          setSelectedProject(e.target.value);
-                          setSelectedPath('');
-                          setFileContent('');
-                        }}
-                      >
-                        {projects.map((project) => (
-                          <option key={project.name} value={project.name}>
-                            {project.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="project-dropdown-container">
+                        <button 
+                          className="project-dropdown-trigger" 
+                          onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+                        >
+                          {selectedProject || '选择项目...'}
+                          <span className="dropdown-arrow">{showProjectDropdown ? '▲' : '▼'}</span>
+                        </button>
+                        {showProjectDropdown && (
+                          <div className="project-dropdown-menu">
+                            {projects.map((project) => (
+                              <div 
+                                key={project.name} 
+                                className={`project-dropdown-item ${selectedProject === project.name ? 'selected' : ''}`}
+                              >
+                                <span 
+                                  className="project-item-name"
+                                  onClick={() => handleSelectProject(project.name)}
+                                >
+                                  {project.name}
+                                </span>
+                                <button 
+                                  className="project-item-delete"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteProject(project.name);
+                                  }}
+                                  title={`删除项目 "${project.name}"`}
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            ))}
+                            <div className="project-dropdown-divider"></div>
+                            <div 
+                              className="project-dropdown-item new-project-item"
+                              onClick={() => {
+                                setShowProjectDropdown(false);
+                                setShowNewProjectModal(true);
+                              }}
+                            >
+                              ➕ 新建项目...
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <button className="btn-new-project" onClick={() => setShowNewProjectModal(true)} title="新建项目">
                         ➕
-                      </button>
-                      <button className="btn-delete-project" onClick={handleDeleteProject} title="删除当前项目">
-                        🗑️
                       </button>
                     </div>
                     <FileTree
