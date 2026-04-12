@@ -12,12 +12,13 @@ interface RenderFrameProps {
   onFileChange?: (path: string) => void;
   onElementSelect?: (info: UISelectorInfo) => void;
   onIntentGenerate?: (intent: UIIntent) => void;
+  onRefresh?: () => void;
 }
 
 type ViewMode = 'preview' | 'code';
 type FileType = 'html' | 'css' | 'js' | 'json' | 'text' | 'unknown';
 
-export function RenderFrame({ filePath, fileContent, onFileChange, onElementSelect, onIntentGenerate }: RenderFrameProps) {
+export function RenderFrame({ filePath, fileContent, onFileChange, onElementSelect, onIntentGenerate, onRefresh }: RenderFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -147,6 +148,14 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
     <div className="render-frame">
       <div className="render-frame-header">
         <div className="render-frame-header-left">
+          <button 
+            className="btn-refresh" 
+            onClick={() => onRefresh?.()}
+            title="刷新当前文件（Ctrl+R）"
+            disabled={!filePath}
+          >
+            🔃
+          </button>
           <span className="render-frame-title">
             {fileType === 'html' && '📄'}
             {fileType === 'css' && '🎨'}

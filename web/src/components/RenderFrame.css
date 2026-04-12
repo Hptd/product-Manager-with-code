@@ -26,6 +26,31 @@
   flex-wrap: wrap;
 }
 
+/* 刷新按钮 */
+.btn-refresh {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-refresh:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.15);
+  border-color: #4caf50;
+  transform: rotate(180deg);
+}
+
+.btn-refresh:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .render-frame-header-right {
   display: flex;
   align-items: center;

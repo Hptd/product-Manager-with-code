@@ -135,6 +135,19 @@ function App() {
     }
   };
 
+  const handleRefreshFile = async () => {
+    if (!selectedPath || !selectedProject) {
+      return;
+    }
+    try {
+      const content = await api.getFileContent(selectedProject, selectedPath);
+      setFileContent(content);
+    } catch (error) {
+      console.error('刷新文件失败:', error);
+      alert('刷新失败，请重试');
+    }
+  };
+
   const handleElementSelect = (info: UISelectorInfo) => {
     console.log('🎯 元素选择:', info);
     setLastElementInfo(info);
@@ -299,6 +312,7 @@ function App() {
               onFileChange={handleFileChange}
               onElementSelect={handleElementSelect}
               onIntentGenerate={handleIntentGenerate}
+              onRefresh={handleRefreshFile}
             />
           </div>
         </div>
