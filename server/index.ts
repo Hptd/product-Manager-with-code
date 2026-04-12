@@ -23,24 +23,23 @@ app.use(express.json());
 // 存储终端会话
 const terminalSessions = new Map();
 
-// 配置 multer 用于文件上传
-const uploadDir = path.join(PROJECTS_DIR, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+// 中文文件名编码修复
+// 将 Latin-1 编码的字符串转换回 UTF-8
+function fixFilenameEncoding(filename: string): string {
+  try {
+    // multer 使用 Latin-1 解析，需要转换回 UTF-8
+    const buffer = Buffer.from(filename, 'latin1');
+    return buffer.toString('utf8');
+  } catch (error) {
+    console.error('文件名编码修复失败:', error);
+    return filename;
+  }
 }
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
-
-const upload = multer({ 
-  storage,
+// 配置 multer 用于文件上传
+// 使用内存存储，然后手动保存到目标位置
+const upload = multer({
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB 限制
 });
 
@@ -442,35 +441,96 @@ app.post('/api/upload', upload.array('files', 10), async (req, res) => {
   try {
     const projectName = req.body.project || 'project-1';
     const targetPath = req.body.path || '';
-    
+
+    console.log('📥 上传请求:', {
+      projectName,
+      targetPath,
+      fileCount: req.files?.length || 0
+    });
+
     if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
       return res.status(400).json({ success: false, error: '没有上传文件' });
     }
-    
+
     const projectDir = path.join(PROJECTS_DIR, projectName);
     const targetDir = path.join(projectDir, targetPath);
-    
+
     if (!fs.existsSync(targetDir)) {
+      console.log('📁 创建目录:', targetDir);
       fs.mkdirSync(targetDir, { recursive: true });
     }
-    
+
     const uploadedFiles: Array<{ name: string; path: string; size: number }> = [];
-    
+    const failedFiles: Array<{ name: string; error: string }> = [];
+
     for (const file of req.files) {
-      const destPath = path.join(targetDir, file.filename);
-      await fs.promises.rename(file.path, destPath);
-      
-      uploadedFiles.push({
-        name: file.originalname,
-        path: targetPath ? `${targetPath}/${file.filename}` : file.filename,
-        size: file.size
-      });
+      try {
+        // 修复中文文件名编码问题（Latin-1 → UTF-8）
+        const originalName = fixFilenameEncoding(file.originalname);
+        console.log('📁 原始文件名:', originalName, `(${file.size} bytes)`);
+
+        // 使用原始文件名，改进中文和特殊字符支持
+        // 只替换不允许的字符：/ \ : * ? " < > | 和控制字符
+        let safeName = originalName
+          .replace(/[\/\\:*?"<>|\x00-\x1f\x7f]/g, '_')  // 替换非法字符
+          .replace(/\s+/g, ' ')  // 规范化空白字符
+          .trim();
+
+        // 如果文件名为空，使用默认名称
+        if (!safeName || safeName === '.') {
+          safeName = `unnamed_${Date.now()}`;
+          console.log('⚠️ 文件名为空，使用默认名称:', safeName);
+        }
+
+        // 如果文件已存在，添加序号避免覆盖
+        let finalFilename = safeName;
+        let counter = 1;
+        while (fs.existsSync(path.join(targetDir, finalFilename))) {
+          const ext = path.extname(safeName);
+          const name = path.basename(safeName, ext);
+          finalFilename = `${name}_${counter}${ext}`;
+          counter++;
+        }
+
+        if (finalFilename !== safeName) {
+          console.log('⚠️ 文件重名，重命名为:', finalFilename);
+        }
+
+        const finalDestPath = path.join(targetDir, finalFilename);
+        await fs.promises.writeFile(finalDestPath, file.buffer);
+
+        uploadedFiles.push({
+          name: finalFilename,
+          path: targetPath ? `${targetPath}/${finalFilename}` : finalFilename,
+          size: file.size
+        });
+
+        console.log('✅ 文件上传成功:', finalFilename);
+      } catch (fileError: any) {
+        console.error('❌ 单个文件上传失败:', file.originalname, fileError.message);
+        failedFiles.push({
+          name: file.originalname,
+          error: fileError.message
+        });
+      }
     }
-    
-    console.log(`📤 文件已上传：${uploadedFiles.map(f => f.name).join(', ')}`);
-    res.json({ success: true, files: uploadedFiles });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to upload files' });
+
+    console.log(`📤 上传完成：成功 ${uploadedFiles.length} 个，失败 ${failedFiles.length} 个`);
+
+    const response = {
+      success: true,
+      files: uploadedFiles,
+      failed: failedFiles,
+      message: `成功上传 ${uploadedFiles.length} 个文件${failedFiles.length > 0 ? `，${failedFiles.length} 个失败` : ''}`
+    };
+
+    res.json(response);
+  } catch (error: any) {
+    console.error('❌ 上传失败:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to upload files'
+    });
   }
 });
 
