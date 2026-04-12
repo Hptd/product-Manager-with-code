@@ -107,10 +107,15 @@ function App() {
   };
 
   const handleSelectFile = async (path: string) => {
-    setSelectedPath(path);
+    // 将路径转换为完整格式：project-1/logo.png
+    const fullPath = `${selectedProject}/${path}`;
+    setSelectedPath(fullPath);
 
-    // 只加载 HTML 文件内容
-    if (path.endsWith('.html') || path.endsWith('.htm')) {
+    // 加载 HTML、Markdown、文本文件内容
+    const textExts = ['.html', '.htm', '.md', '.markdown', '.txt', '.css', '.js', '.ts', '.jsx', '.tsx', '.json', '.py', '.xml', '.yaml', '.yml'];
+    const isTextFile = textExts.some(ext => path.toLowerCase().endsWith(ext));
+
+    if (isTextFile) {
       try {
         const content = await api.getFileContent(selectedProject, path);
         setFileContent(content);
@@ -119,13 +124,17 @@ function App() {
         setFileContent('');
       }
     } else {
+      // 图片/视频等二进制文件不需要加载内容，由组件自行获取
       setFileContent('');
     }
   };
 
   const handleFileChange = async (path: string) => {
     // 热更新触发时重新加载文件内容
-    if (path.endsWith('.html') || path.endsWith('.htm')) {
+    const textExts = ['.html', '.htm', '.md', '.markdown', '.txt', '.css', '.js', '.ts', '.jsx', '.tsx', '.json', '.py', '.xml', '.yaml', '.yml'];
+    const isTextFile = textExts.some(ext => path.toLowerCase().endsWith(ext));
+
+    if (isTextFile) {
       try {
         const content = await api.getFileContent(selectedProject, path);
         setFileContent(content);
@@ -135,12 +144,16 @@ function App() {
     }
   };
 
+  // 刷新文件
   const handleRefreshFile = async () => {
     if (!selectedPath || !selectedProject) {
       return;
     }
+    // selectedPath 格式：project-1/logo.png
+    // 需要提取相对路径传给 API
+    const relativePath = selectedPath.includes('/') ? selectedPath.substring(selectedPath.indexOf('/') + 1) : selectedPath;
     try {
-      const content = await api.getFileContent(selectedProject, selectedPath);
+      const content = await api.getFileContent(selectedProject, relativePath);
       setFileContent(content);
     } catch (error) {
       console.error('刷新文件失败:', error);

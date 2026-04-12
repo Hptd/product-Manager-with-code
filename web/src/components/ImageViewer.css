@@ -1,0 +1,213 @@
+/* 图片查看器样式 */
+
+.image-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #1e1e1e;
+}
+
+/* 工具栏 */
+.image-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3e3e42;
+  flex-wrap: wrap;
+}
+
+.image-viewer-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-btn {
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: #4e4e52;
+  border-color: #007acc;
+}
+
+.toolbar-btn:active:not(:disabled) {
+  background: #007acc;
+  color: #fff;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-btn-reset {
+  background: #0e639c;
+}
+
+.toolbar-btn-reset:hover:not(:disabled) {
+  background: #1177bb;
+}
+
+.zoom-level {
+  color: #cccccc;
+  font-size: 13px;
+  min-width: 50px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.image-viewer-info {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.image-info {
+  color: #858585;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* 图片展示区域 */
+.image-viewer-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  background: #1e1e1e;
+}
+
+.image-viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform 0.1s ease-out, opacity 0.3s ease;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.image-viewer-image.loading {
+  opacity: 0;
+}
+
+/* 加载状态 */
+.image-viewer-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #858585;
+  background: rgba(30, 30, 30, 0.9);
+  z-index: 10;
+}
+
+.loading-spinner {
+  font-size: 32px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 错误状态 */
+.image-viewer-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #f48771;
+  background: rgba(30, 30, 30, 0.9);
+  z-index: 10;
+}
+
+.error-icon {
+  font-size: 40px;
+}
+
+.retry-btn {
+  background: #0e639c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.retry-btn:hover {
+  background: #1177bb;
+}
+
+/* 空状态 */
+.image-viewer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #858585;
+  gap: 16px;
+}
+
+.image-viewer-empty .empty-icon {
+  font-size: 64px;
+  opacity: 0.5;
+}
+
+.image-viewer-empty .empty-text {
+  font-size: 14px;
+}
+
+/* 滚动条样式 */
+.image-viewer-container::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.image-viewer-container::-webkit-scrollbar-track {
+  background: #252526;
+}
+
+.image-viewer-container::-webkit-scrollbar-thumb {
+  background: #4e4e52;
+  border-radius: 5px;
+}
+
+.image-viewer-container::-webkit-scrollbar-thumb:hover {
+  background: #5e5e62;
+}

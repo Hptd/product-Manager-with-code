@@ -4,7 +4,7 @@ import './CodeEditor.css';
 interface CodeEditorProps {
   filePath: string;
   fileContent: string;
-  fileType: 'html' | 'css' | 'js' | 'json' | 'text';
+  fileType: 'html' | 'css' | 'js' | 'json' | 'text' | 'markdown';
   onSave?: (content: string) => Promise<void>;
   onContentChange?: (content: string) => void;
 }

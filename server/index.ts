@@ -260,13 +260,70 @@ app.get('/api/file', async (req, res) => {
     const projectName = req.query.project as string || 'project-1';
     const filePath = req.query.path as string;
     const fullPath = path.join(PROJECTS_DIR, projectName, filePath);
-    
+
     if (!fullPath.startsWith(PROJECTS_DIR)) {
       return res.status(403).json({ success: false, error: 'Invalid path' });
     }
     const content = await fs.promises.readFile(fullPath, 'utf-8');
     res.json({ success: true, content });
   } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to read file' });
+  }
+});
+
+// 读取文件 Blob API（用于图片/视频等二进制文件）
+app.get('/api/file/blob', async (req, res) => {
+  try {
+    const projectName = req.query.project as string || 'project-1';
+    const filePath = req.query.path as string;
+    
+    console.log('📥 Blob API 请求:', {
+      project: projectName,
+      path: filePath,
+      query: req.query
+    });
+    
+    const fullPath = path.join(PROJECTS_DIR, projectName, filePath);
+
+    console.log('📁 完整路径:', fullPath);
+
+    if (!fullPath.startsWith(PROJECTS_DIR)) {
+      return res.status(403).json({ success: false, error: 'Invalid path' });
+    }
+
+    const fileBuffer = await fs.promises.readFile(fullPath);
+
+    console.log('✅ 文件读取成功:', {
+      size: fileBuffer.length,
+      path: filePath
+    });
+
+    // 设置 Content-Type
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp',
+      '.ico': 'image/x-icon',
+      '.bmp': 'image/bmp',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.webm': 'video/webm',
+      '.ogg': 'video/ogg',
+      '.mkv': 'video/x-matroska',
+      '.flv': 'video/x-flv'
+    };
+
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('❌ Blob API 错误:', error);
     res.status(500).json({ success: false, error: 'Failed to read file' });
   }
 });

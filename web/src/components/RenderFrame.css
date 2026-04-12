@@ -166,3 +166,12 @@
   color: #f48771;
   background: #fff5f5;
 }
+
+/* 图片/视频/Markdown 查看器 - 填充满整个区域 */
+.render-frame-content .image-viewer,
+.render-frame-content .video-player,
+.render-frame-content .markdown-viewer {
+  flex: 1;
+  height: 100%;
+  width: 100%;
+}

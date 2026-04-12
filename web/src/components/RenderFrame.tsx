@@ -3,6 +3,9 @@ import { UISelectorOverlay, type UISelectorInfo, type SelectorMode, type UIInten
 import { ModeSelector, UISelectorDisplay } from './UISelectorComponents';
 import { HoverTooltip, StatusBar } from './UISelectorTooltip';
 import { CodeEditor } from './CodeEditor';
+import { ImageViewer } from './ImageViewer';
+import { VideoPlayer } from './VideoPlayer';
+import { MarkdownViewer } from './MarkdownViewer';
 import { api } from '../api/client';
 import './RenderFrame.css';
 
@@ -16,7 +19,8 @@ interface RenderFrameProps {
 }
 
 type ViewMode = 'preview' | 'code';
-type FileType = 'html' | 'css' | 'js' | 'json' | 'text' | 'unknown';
+type FileType = 
+  | 'html' | 'css' | 'js' | 'json' | 'text' | 'markdown' | 'image' | 'video' | 'unknown';
 
 export function RenderFrame({ filePath, fileContent, onFileChange, onElementSelect, onIntentGenerate, onRefresh }: RenderFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -26,18 +30,43 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
   const [currentMode, setCurrentMode] = useState<SelectorMode>('select');
   const [hoverElementInfo, setHoverElementInfo] = useState<HoverElementInfo | null>(null);
 
-  // 新增：视图模式和编辑状态
+  // 视图模式和编辑状态
   const [viewMode, setViewMode] = useState<ViewMode>('preview');
   const [currentCode, setCurrentCode] = useState<string>('');
   const [fileType, setFileType] = useState<FileType>('unknown');
+  const [imageUrl, setImageUrl] = useState<string>('');
 
   // 检测文件类型
   const detectFileType = (path: string): FileType => {
-    if (path.endsWith('.html') || path.endsWith('.htm')) return 'html';
-    if (path.endsWith('.css')) return 'css';
-    if (path.endsWith('.js')) return 'js';
-    if (path.endsWith('.json')) return 'json';
-    return 'text';
+    const lowerPath = path.toLowerCase();
+    if (lowerPath.endsWith('.html') || lowerPath.endsWith('.htm')) return 'html';
+    if (lowerPath.endsWith('.css')) return 'css';
+    if (lowerPath.endsWith('.js') || lowerPath.endsWith('.ts') || lowerPath.endsWith('.jsx') || lowerPath.endsWith('.tsx')) return 'js';
+    if (lowerPath.endsWith('.json')) return 'json';
+    if (lowerPath.endsWith('.md') || lowerPath.endsWith('.markdown')) return 'markdown';
+    
+    // 图片格式
+    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.bmp'];
+    if (imageExts.some(ext => lowerPath.endsWith(ext))) return 'image';
+    
+    // 视频格式
+    const videoExts = ['.mp4', '.mov', '.avi', '.webm', '.ogg', '.mkv', '.flv'];
+    if (videoExts.some(ext => lowerPath.endsWith(ext))) return 'video';
+    
+    // 文本/代码格式
+    const textExts = ['.txt', '.py', '.cc', '.cpp', '.h', '.hpp', '.java', '.c', '.cs', '.go', '.rs', '.php', '.rb', '.sh', '.yaml', '.yml', '.xml', '.toml'];
+    if (textExts.some(ext => lowerPath.endsWith(ext))) return 'text';
+    
+    return 'unknown';
+  };
+
+  // 获取媒体文件 URL（图片/视频）
+  // 直接返回 API 端点 URL，让浏览器自行加载
+  // 优势：本地/云端都适用，浏览器自动缓存，无需清理 Blob
+  const getMediaUrl = (projectName: string, filePath: string) => {
+    // 使用当前 API 基础 URL（自动适配本地和云端）
+    const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.protocol + '//' + window.location.hostname + ':3001';
+    return `${apiBaseUrl}/api/file/blob?project=${projectName}&path=${encodeURIComponent(filePath)}`;
   };
 
   // 处理文件内容变化
@@ -49,15 +78,51 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
       if (filePath) {
         const type = detectFileType(filePath);
         setFileType(type);
-        // CSS/JS 文件自动切换到代码模式
-        if (type === 'css' || type === 'js' || type === 'json' || type === 'text') {
+        
+        // 根据文件类型设置视图模式
+        if (type === 'css' || type === 'js' || type === 'json' || type === 'text' || type === 'unknown') {
           setViewMode('code');
+        } else if (type === 'markdown') {
+          setViewMode('preview');
+        } else if (type === 'image' || type === 'video') {
+          setViewMode('preview');
         } else {
           setViewMode('preview');
         }
       }
     }
   }, [fileContent, filePath]);
+
+  // 当文件类型是图片/视频时，获取媒体 URL
+  useEffect(() => {
+    if (!filePath || (fileType !== 'image' && fileType !== 'video')) {
+      setImageUrl('');
+      return;
+    }
+    
+    // 解析项目名和文件路径
+    // filePath 格式：project-1/logo.png 或 logo.png
+    const slashIndex = filePath.indexOf('/');
+    let projectName: string;
+    let relativePath: string;
+    
+    if (slashIndex > 0) {
+      // 有项目名：project-1/logo.png
+      projectName = filePath.substring(0, slashIndex);
+      relativePath = filePath.substring(slashIndex + 1);
+    } else {
+      // 没有项目名：使用默认项目名
+      projectName = 'project-1';
+      relativePath = filePath;
+    }
+    
+    console.log('🔍 获取媒体文件 URL:', { filePath, projectName, relativePath, fileType });
+    
+    // 直接生成 URL，不需要异步请求
+    const url = getMediaUrl(projectName, relativePath);
+    console.log('📷 媒体文件 URL:', url);
+    setImageUrl(url);
+  }, [filePath, fileType]);
 
   // 处理热更新消息
   useEffect(() => {
@@ -144,37 +209,54 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
     );
   }
 
+  // 判断是否显示功能按钮
+  const showRefreshButton = fileType === 'html';
+  const showEditButton = fileType === 'html' || fileType === 'markdown';
+  const showUISelector = fileType === 'html' && viewMode === 'preview';
+
   return (
     <div className="render-frame">
       <div className="render-frame-header">
         <div className="render-frame-header-left">
-          <button 
-            className="btn-refresh" 
-            onClick={() => onRefresh?.()}
-            title="刷新当前文件（Ctrl+R）"
-            disabled={!filePath}
-          >
-            🔃
-          </button>
+          {showRefreshButton && (
+            <button
+              className="btn-refresh"
+              onClick={() => onRefresh?.()}
+              title="刷新当前文件（Ctrl+R）"
+              disabled={!filePath}
+            >
+              🔃
+            </button>
+          )}
           <span className="render-frame-title">
             {fileType === 'html' && '📄'}
             {fileType === 'css' && '🎨'}
             {fileType === 'js' && '📜'}
             {fileType === 'json' && '📋'}
             {fileType === 'text' && '📝'}
+            {fileType === 'markdown' && '📘'}
+            {fileType === 'image' && '🖼️'}
+            {fileType === 'video' && '🎬'}
+            {fileType === 'unknown' && '📁'}
             {viewMode === 'preview' ? '预览' : '编辑'}：{filePath}
           </span>
           <span className="render-frame-status">{error ? '❌ 错误' : '✅ 正常'}</span>
         </div>
         <div className="render-frame-header-right">
-          {/* HTML 文件显示切换按钮 */}
-          {fileType === 'html' && (
+          {/* 编辑代码按钮 - HTML 和 Markdown 显示 */}
+          {showEditButton && (
             <button className="view-mode-toggle" onClick={toggleViewMode} title="切换预览/代码">
               {viewMode === 'preview' ? '📝 编辑代码' : '👁️ 预览'}
             </button>
           )}
+          {/* 保存按钮 - 代码编辑模式显示（除了 HTML 预览模式） */}
+          {viewMode === 'code' && (
+            <label className="ui-selector-toggle" style={{ background: 'rgba(76, 175, 80, 0.2)' }}>
+              <span>💾 编辑模式</span>
+            </label>
+          )}
           {/* UI 选择器模式选择 - 仅 HTML 预览模式显示 */}
-          {fileType === 'html' && viewMode === 'preview' && uiSelectorEnabled && (
+          {showUISelector && uiSelectorEnabled && (
             <ModeSelector
               currentMode={currentMode}
               onModeChange={setCurrentMode}
@@ -182,7 +264,7 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
             />
           )}
           {/* UI 选择器开关 - 仅 HTML 预览模式显示 */}
-          {fileType === 'html' && viewMode === 'preview' && (
+          {showUISelector && (
             <label className="ui-selector-toggle">
               <input
                 type="checkbox"
@@ -203,12 +285,27 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
             <CodeEditor
               filePath={filePath}
               fileContent={fileContent || ''}
-              fileType={fileType === 'unknown' ? 'text' : fileType}
+              fileType={
+                fileType === 'unknown' || fileType === 'image' || fileType === 'video'
+                  ? 'text'
+                  : fileType === 'markdown'
+                  ? 'text'
+                  : fileType
+              }
               onSave={handleSave}
               onContentChange={setCurrentCode}
             />
+          ) : fileType === 'image' && imageUrl ? (
+            // 图片预览
+            <ImageViewer src={imageUrl} fileName={filePath.split('/').pop() || filePath} />
+          ) : fileType === 'video' && imageUrl ? (
+            // 视频预览
+            <VideoPlayer src={imageUrl} fileName={filePath.split('/').pop() || filePath} />
+          ) : fileType === 'markdown' ? (
+            // Markdown 预览
+            <MarkdownViewer content={srcDoc} fileName={filePath.split('/').pop() || filePath} />
           ) : (
-            // 预览模式
+            // HTML 预览（默认）
             <div className="iframe-wrapper">
               <iframe
                 ref={iframeRef}
@@ -229,7 +326,7 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
                   mode={currentMode}
                 />
               )}
-              
+
               {/* 悬停提示框 */}
               {uiSelectorEnabled && currentMode === 'select' && (
                 <HoverTooltip info={hoverElementInfo} visible={!!hoverElementInfo} />
