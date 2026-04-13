@@ -7,6 +7,7 @@ import { ImageViewer } from './ImageViewer';
 import { VideoPlayer } from './VideoPlayer';
 import { MarkdownViewer } from './MarkdownViewer';
 import { api } from '../api/client';
+import { extractResourcePaths, exportToZip, isTextFile, type ResourceFile } from '../utils/exportHelper';
 import './RenderFrame.css';
 
 interface RenderFrameProps {
@@ -27,7 +28,7 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [uiSelectorEnabled, setUiSelectorEnabled] = useState(true);
+  const [uiSelectorEnabled, setUiSelectorEnabled] = useState(false);
   const [currentMode, setCurrentMode] = useState<SelectorMode>('select');
   const [hoverElementInfo, setHoverElementInfo] = useState<HoverElementInfo | null>(null);
 
@@ -36,6 +37,9 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
   const [currentCode, setCurrentCode] = useState<string>('');
   const [fileType, setFileType] = useState<FileType>('unknown');
   const [imageUrl, setImageUrl] = useState<string>('');
+
+  // 导出状态
+  const [isExporting, setIsExporting] = useState(false);
 
   // 检测文件类型
   const detectFileType = (path: string): FileType => {
@@ -350,6 +354,68 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
     setViewMode(prev => prev === 'preview' ? 'code' : 'preview');
   };
 
+  // 导出HTML及其资源
+  const handleExport = async () => {
+    if (!filePath || !fileContent || fileType !== 'html') {
+      alert('当前文件不是HTML文件，无法导出');
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      console.log('[handleExport] 开始导出...', { filePath, projectName });
+
+      // 1. 提取HTML中的所有资源路径
+      const resourcePaths = extractResourcePaths(fileContent, filePath);
+      console.log('[handleExport] 提取到的资源路径:', resourcePaths);
+
+      if (resourcePaths.length === 0) {
+        // 没有外部资源，直接导出HTML
+        console.log('[handleExport] 没有外部资源，直接导出HTML');
+        await exportToZip(fileContent, filePath.split('/').pop() || 'index.html', [], projectName);
+        alert('✅ 导出成功！');
+        setIsExporting(false);
+        return;
+      }
+
+      // 2. 批量获取资源文件
+      console.log('[handleExport] 正在获取资源文件...');
+      const resourceFiles = await api.getResourceFiles(projectName, resourcePaths);
+
+      // 3. 转换为 ResourceFile 格式
+      const files: ResourceFile[] = resourceFiles
+        .filter(f => f.exists)
+        .map(f => ({
+          path: f.path,
+          content: f.content || f.base64 || '',
+          isText: isTextFile(f.path)
+        }));
+
+      const successCount = files.length;
+      const failCount = resourcePaths.length - successCount;
+
+      console.log('[handleExport] 获取到的资源文件:', successCount, '个', failCount > 0 ? `(失败 ${failCount} 个)` : '');
+
+      // 4. 导出为ZIP
+      const htmlFileName = filePath.split('/').pop() || 'index.html';
+      await exportToZip(fileContent, htmlFileName, files, projectName);
+
+      console.log('[handleExport] 导出完成');
+      
+      if (failCount > 0) {
+        alert(`⚠️ 导出完成！成功 ${successCount} 个文件，失败 ${failCount} 个文件`);
+      } else {
+        alert(`✅ 导出成功！共导出 ${successCount + 1} 个文件`);
+      }
+    } catch (error) {
+      console.error('[handleExport] 导出失败:', error);
+      alert('导出失败，请重试');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!filePath) {
     return (
       <div className="render-frame-empty">
@@ -365,6 +431,7 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
   const showRefreshButton = fileType === 'html';
   const showEditButton = fileType === 'html' || fileType === 'markdown';
   const showUISelector = fileType === 'html' && viewMode === 'preview';
+  const showExportButton = fileType === 'html' && viewMode === 'preview';
 
   return (
     <div className="render-frame">
@@ -395,6 +462,17 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
           <span className="render-frame-status">{error ? '❌ 错误' : '✅ 正常'}</span>
         </div>
         <div className="render-frame-header-right">
+          {/* 导出按钮 - 仅 HTML 预览模式显示 */}
+          {showExportButton && (
+            <button
+              className="btn-export"
+              onClick={handleExport}
+              disabled={isExporting}
+              title="导出HTML及所有资源文件为ZIP"
+            >
+              {isExporting ? '⏳ 导出中...' : '📦 导出'}
+            </button>
+          )}
           {/* 编辑代码按钮 - HTML 和 Markdown 显示 */}
           {showEditButton && (
             <button className="view-mode-toggle" onClick={toggleViewMode} title="切换预览/代码">

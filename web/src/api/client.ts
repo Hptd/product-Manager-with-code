@@ -118,5 +118,20 @@ export const api = {
   // 删除项目
   async deleteProject(name: string): Promise<void> {
     await axios.delete(`${API_BASE_URL}/projects/${name}`);
+  },
+
+  // 批量获取资源文件（用于导出功能）
+  async getResourceFiles(projectName: string, paths: string[]): Promise<Array<{
+    path: string;
+    content?: string;
+    base64?: string;
+    exists: boolean;
+    error?: string;
+  }>> {
+    const response = await axios.post(`${API_BASE_URL}/files/batch`, {
+      project: projectName,
+      paths
+    });
+    return response.data.files;
   }
 };

@@ -340,6 +340,80 @@ app.get('/api/file/blob', async (req, res) => {
   }
 });
 
+// 批量获取资源文件 API（用于导出功能）
+app.post('/api/files/batch', async (req, res) => {
+  try {
+    const { project, paths } = req.body;
+    const projectName = project || 'project-1';
+
+    if (!paths || !Array.isArray(paths)) {
+      return res.status(400).json({ success: false, error: 'paths 必须是数组' });
+    }
+
+    console.log('📥 批量获取资源文件:', { project: projectName, fileCount: paths.length });
+
+    const results: Array<{
+      path: string;
+      content?: string;
+      base64?: string;
+      exists: boolean;
+      error?: string;
+    }> = [];
+
+    for (const filePath of paths) {
+      try {
+        // URL 解码
+        let decodedPath = filePath;
+        try {
+          decodedPath = decodeURIComponent(filePath);
+        } catch (e) {
+          // 使用原始路径
+        }
+
+        // 统一路径分隔符
+        const normalizedPath = decodedPath.replace(/\//g, path.sep);
+        const fullPath = path.join(PROJECTS_DIR, projectName, normalizedPath);
+
+        if (!fullPath.startsWith(PROJECTS_DIR)) {
+          results.push({ path: filePath, exists: false, error: 'Invalid path' });
+          continue;
+        }
+
+        const fileBuffer = await fs.promises.readFile(fullPath);
+        const ext = path.extname(filePath).toLowerCase();
+
+        // 判断是否为文本文件
+        const textExts = ['.html', '.htm', '.css', '.js', '.ts', '.json', '.xml', '.txt', '.md', '.svg'];
+        const isTextFile = textExts.includes(ext);
+
+        if (isTextFile) {
+          results.push({
+            path: filePath,
+            content: fileBuffer.toString('utf-8'),
+            exists: true
+          });
+        } else {
+          // 二进制文件返回 base64
+          results.push({
+            path: filePath,
+            base64: fileBuffer.toString('base64'),
+            exists: true
+          });
+        }
+      } catch (error: any) {
+        console.error(`❌ 读取文件失败: ${filePath}`, error.message);
+        results.push({ path: filePath, exists: false, error: error.message });
+      }
+    }
+
+    console.log(`✅ 批量获取完成: 成功 ${results.filter(r => r.exists).length}/${results.length}`);
+    res.json({ success: true, files: results });
+  } catch (error: any) {
+    console.error('❌ 批量获取资源文件失败:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 保存文件 API
 app.post('/api/file', async (req, res) => {
   try {
