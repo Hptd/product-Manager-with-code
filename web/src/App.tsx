@@ -107,9 +107,9 @@ function App() {
   };
 
   const handleSelectFile = async (path: string) => {
-    // 将路径转换为完整格式：project-1/logo.png
-    const fullPath = `${selectedProject}/${path}`;
-    setSelectedPath(fullPath);
+    // FileTree 返回的 path 是相对于项目目录的路径：assets/file.json 或 index.html
+    // 直接传递给 API 即可
+    setSelectedPath(path);
 
     // 加载 HTML、Markdown、文本文件内容
     const textExts = ['.html', '.htm', '.md', '.markdown', '.txt', '.css', '.js', '.ts', '.jsx', '.tsx', '.json', '.py', '.xml', '.yaml', '.yml'];
@@ -117,6 +117,7 @@ function App() {
 
     if (isTextFile) {
       try {
+        // path 已经是相对于项目目录的路径，直接传递给 API
         const content = await api.getFileContent(selectedProject, path);
         setFileContent(content);
       } catch (error) {
@@ -131,6 +132,7 @@ function App() {
 
   const handleFileChange = async (path: string) => {
     // 热更新触发时重新加载文件内容
+    // path 是相对于项目目录的路径：assets/file.json 或 index.html
     const textExts = ['.html', '.htm', '.md', '.markdown', '.txt', '.css', '.js', '.ts', '.jsx', '.tsx', '.json', '.py', '.xml', '.yaml', '.yml'];
     const isTextFile = textExts.some(ext => path.toLowerCase().endsWith(ext));
 
@@ -149,11 +151,9 @@ function App() {
     if (!selectedPath || !selectedProject) {
       return;
     }
-    // selectedPath 格式：project-1/logo.png
-    // 需要提取相对路径传给 API
-    const relativePath = selectedPath.includes('/') ? selectedPath.substring(selectedPath.indexOf('/') + 1) : selectedPath;
+    // selectedPath 是相对于项目目录的路径：assets/file.json 或 index.html
     try {
-      const content = await api.getFileContent(selectedProject, relativePath);
+      const content = await api.getFileContent(selectedProject, selectedPath);
       setFileContent(content);
     } catch (error) {
       console.error('刷新文件失败:', error);
@@ -322,6 +322,7 @@ function App() {
             <RenderFrame
               filePath={selectedPath}
               fileContent={fileContent}
+              projectName={selectedProject}
               onFileChange={handleFileChange}
               onElementSelect={handleElementSelect}
               onIntentGenerate={handleIntentGenerate}

@@ -12,6 +12,7 @@ import './RenderFrame.css';
 interface RenderFrameProps {
   filePath?: string;
   fileContent?: string;
+  projectName?: string;  // 新增项目名参数
   onFileChange?: (path: string) => void;
   onElementSelect?: (info: UISelectorInfo) => void;
   onIntentGenerate?: (intent: UIIntent) => void;
@@ -22,7 +23,7 @@ type ViewMode = 'preview' | 'code';
 type FileType = 
   | 'html' | 'css' | 'js' | 'json' | 'text' | 'markdown' | 'image' | 'video' | 'unknown';
 
-export function RenderFrame({ filePath, fileContent, onFileChange, onElementSelect, onIntentGenerate, onRefresh }: RenderFrameProps) {
+export function RenderFrame({ filePath, fileContent, projectName = 'project-1', onFileChange, onElementSelect, onIntentGenerate, onRefresh }: RenderFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [srcDoc, setSrcDoc] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -69,27 +70,167 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
     return `${apiBaseUrl}/api/file/blob?project=${projectName}&path=${encodeURIComponent(filePath)}`;
   };
 
+  // 为 HTML 内容添加 base 标签，解决相对路径问题
+  // 由于浏览器会将相对路径拼接到 base URL 的路径部分（而非查询参数），
+  // 我们需要直接替换 HTML 中的相对资源路径为绝对 API URL
+  const addBaseTag = (html: string, filePath: string) => {
+    if (!filePath || !html) return html;
+
+    // 使用组件的 projectName prop（而不是从 filePath 提取）
+    // filePath 格式：indexx.html 或 assets/file.html（相对于项目目录）
+    // 直接使用组件 prop 中的 projectName
+    const htmlProjectName = projectName || 'project-1';
+    
+    // 计算文件所在目录
+    const parts = filePath.split('/');
+    const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+
+    // 构建 API 基础 URL
+    const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.protocol + '//' + window.location.hostname + ':3001';
+
+    console.log('[addBaseTag]', { filePath, htmlProjectName, dirPath });
+
+    // 构建资源路径转换函数
+    const buildResourceUrl = (resourcePath: string) => {
+      return `${apiBaseUrl}/api/file/blob?project=${htmlProjectName}&path=${encodeURIComponent(resourcePath)}`;
+    };
+
+    // 替换 HTML 中的相对资源路径为绝对 API URL
+    // 匹配 src="xxx"、src='xxx'、href="xxx"、href='xxx'
+    const replaceRelativePath = (match: string, attr: string, quote: string, relativePath: string) => {
+      // 跳过绝对路径、data URI、锚点、javascript 等
+      if (relativePath.startsWith('http://') ||
+          relativePath.startsWith('https://') ||
+          relativePath.startsWith('data:') ||
+          relativePath.startsWith('#') ||
+          relativePath.startsWith('javascript:') ||
+          relativePath.startsWith('mailto:')) {
+        return match;
+      }
+
+      // 处理 Windows 本地绝对路径（如 F:\js-vue-project\...\image.png）
+      // 提取相对于项目目录的路径
+      if (relativePath.includes('\\') && !relativePath.startsWith('http')) {
+        // 规范化路径分隔符
+        const normalizedPath = relativePath.replace(/\\/g, '/');
+
+        // 尝试提取 project-1 之后的路径
+        const projectMatch = normalizedPath.match(/project-1[\/\\](.+)$/i);
+        if (projectMatch) {
+          // 找到了项目相对路径
+          const resourcePath = projectMatch[1];
+          const absoluteUrl = buildResourceUrl(resourcePath);
+          console.log('[replaceRelativePath] Windows 路径转换:', relativePath, '->', absoluteUrl);
+          return `${attr}${quote}${absoluteUrl}${quote}`;
+        }
+
+        // 如果没找到项目名，只提取文件名（假设在项目根目录）
+        const fileName = normalizedPath.split('/').pop() || '';
+        const absoluteUrl = buildResourceUrl(fileName);
+        console.log('[replaceRelativePath] Windows 路径转换（仅文件名）:', relativePath, '->', absoluteUrl);
+        return `${attr}${quote}${absoluteUrl}${quote}`;
+      }
+
+      // 计算资源相对于项目目录的完整路径
+      let resourcePath: string;
+      if (relativePath.startsWith('/')) {
+        // 绝对路径（相对于项目根目录）
+        resourcePath = relativePath.substring(1);
+      } else if (relativePath.startsWith('./')) {
+        // 当前目录
+        resourcePath = dirPath ? `${dirPath}/${relativePath.substring(2)}` : relativePath.substring(2);
+      } else if (relativePath.startsWith('../')) {
+        // 父目录 - 简单处理，不考虑多级
+        const parentDir = dirPath.substring(0, dirPath.lastIndexOf('/'));
+        resourcePath = parentDir ? `${parentDir}/${relativePath.substring(3)}` : relativePath.substring(3);
+      } else {
+        // 普通相对路径
+        resourcePath = dirPath ? `${dirPath}/${relativePath}` : relativePath;
+      }
+
+      // 构建绝对 API URL
+      const absoluteUrl = buildResourceUrl(resourcePath);
+      return `${attr}${quote}${absoluteUrl}${quote}`;
+    };
+
+    // 替换 src 和 href 属性中的相对路径
+    let processedHtml = html.replace(
+      /(src\s*=\s*|href\s*=\s*)(["'])([^"']+?)\2/gi,
+      replaceRelativePath
+    );
+
+    // 替换 JavaScript 中的 viewMedia('path', 'type') 调用
+    // 例如：viewMedia('assets/胡图.png', '图片') -> viewMedia('http://localhost:3001/...', '图片')
+    processedHtml = processedHtml.replace(
+      /viewMedia\s*\(\s*(['"])([^'"]+?)\1\s*,\s*(['"])([^'"]*?)\3\s*\)/g,
+      (match, q1, path, q2, type) => {
+        // 跳过已经是绝对路径的情况
+        if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+          return match;
+        }
+
+        // 处理 Windows 路径
+        let resourcePath: string;
+        if (path.includes('\\')) {
+          const normalizedPath = path.replace(/\\/g, '/');
+          const projectMatch = normalizedPath.match(/project-1[\/\\](.+)$/i);
+          resourcePath = projectMatch ? projectMatch[1] : path.split(/[\\\/]/).pop() || '';
+        } else if (path.startsWith('/')) {
+          resourcePath = path.substring(1);
+        } else if (path.startsWith('./')) {
+          resourcePath = dirPath ? `${dirPath}/${path.substring(2)}` : path.substring(2);
+        } else if (path.startsWith('../')) {
+          const parentDir = dirPath.substring(0, dirPath.lastIndexOf('/'));
+          resourcePath = parentDir ? `${parentDir}/${path.substring(3)}` : path.substring(3);
+        } else {
+          resourcePath = dirPath ? `${dirPath}/${path}` : path;
+        }
+
+        const absoluteUrl = buildResourceUrl(resourcePath);
+        console.log('[viewMedia] 路径转换:', path, '->', absoluteUrl);
+        return `viewMedia(${q1}${absoluteUrl}${q1}, ${q2}${type}${q2})`;
+      }
+    );
+
+    console.log('[addBaseTag] 原始 HTML:', html.substring(0, 500));
+    console.log('[addBaseTag] 处理后 HTML:', processedHtml.substring(0, 500));
+
+    return processedHtml;
+  };
+
   // 处理文件内容变化
   useEffect(() => {
-    if (fileContent !== undefined) {
+    if (fileContent !== undefined && filePath) {
+      const type = detectFileType(filePath);
+      setFileType(type);
+
+      // HTML 文件：处理路径后加载
+      const processedContent = type === 'html' ? addBaseTag(fileContent, filePath) : fileContent;
+      
+      console.log('[RenderFrame] 文件内容:', {
+        filePath,
+        fileType: type,
+        processedContent: processedContent.substring(0, 200) + '...'
+      });
+      
+      setSrcDoc(processedContent);
+      setCurrentCode(fileContent);
+      setError(null);
+
+      // 根据文件类型设置视图模式
+      if (type === 'css' || type === 'js' || type === 'json' || type === 'text' || type === 'unknown') {
+        setViewMode('code');
+      } else if (type === 'markdown') {
+        setViewMode('preview');
+      } else if (type === 'image' || type === 'video') {
+        setViewMode('preview');
+      } else {
+        setViewMode('preview');
+      }
+    } else if (fileContent !== undefined) {
       setSrcDoc(fileContent);
       setCurrentCode(fileContent);
       setError(null);
-      if (filePath) {
-        const type = detectFileType(filePath);
-        setFileType(type);
-        
-        // 根据文件类型设置视图模式
-        if (type === 'css' || type === 'js' || type === 'json' || type === 'text' || type === 'unknown') {
-          setViewMode('code');
-        } else if (type === 'markdown') {
-          setViewMode('preview');
-        } else if (type === 'image' || type === 'video') {
-          setViewMode('preview');
-        } else {
-          setViewMode('preview');
-        }
-      }
     }
   }, [fileContent, filePath]);
 
@@ -99,30 +240,35 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
       setImageUrl('');
       return;
     }
-    
+
     // 解析项目名和文件路径
-    // filePath 格式：project-1/logo.png 或 logo.png
+    // filePath 格式：assets/video.mp4 或 project-1/assets/video.mp4
     const slashIndex = filePath.indexOf('/');
-    let projectName: string;
+    let mediaProjectName: string;
     let relativePath: string;
-    
-    if (slashIndex > 0) {
-      // 有项目名：project-1/logo.png
-      projectName = filePath.substring(0, slashIndex);
+
+    // 判断第一个斜杠前的部分是否是项目名格式
+    const firstPart = slashIndex > 0 ? filePath.substring(0, slashIndex) : '';
+    const isProjectPrefix = firstPart && !firstPart.includes('.') && 
+                            !['assets', 'css', 'js', 'images', 'img', 'videos', 'video'].includes(firstPart.toLowerCase());
+
+    if (isProjectPrefix) {
+      // 有项目名：project-1/assets/video.mp4
+      mediaProjectName = firstPart;
       relativePath = filePath.substring(slashIndex + 1);
     } else {
-      // 没有项目名：使用默认项目名
-      projectName = 'project-1';
+      // 没有项目名：assets/video.mp4 或 video.mp4
+      mediaProjectName = projectName;
       relativePath = filePath;
     }
-    
-    console.log('🔍 获取媒体文件 URL:', { filePath, projectName, relativePath, fileType });
-    
+
+    console.log('🔍 获取媒体文件 URL:', { filePath, mediaProjectName, relativePath, fileType });
+
     // 直接生成 URL，不需要异步请求
-    const url = getMediaUrl(projectName, relativePath);
+    const url = getMediaUrl(mediaProjectName, relativePath);
     console.log('📷 媒体文件 URL:', url);
     setImageUrl(url);
-  }, [filePath, fileType]);
+  }, [filePath, fileType, projectName]);
 
   // 处理热更新消息
   useEffect(() => {
@@ -135,25 +281,29 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
     ws.onmessage = async (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'file-change' && filePath) {
-        // 路径匹配逻辑：支持多种路径格式
-        // 后端发送的路径格式：project-1/index.html
-        // 前端 filePath 格式：index.html
+        // 路径匹配逻辑
+        // 后端发送的路径格式：project-1/assets/index.html（包含项目名）
+        // 前端 filePath 格式：assets/index.html（不包含项目名）
         const changedPath = data.path;
+        
+        // 从 changedPath 中提取不包含项目名的部分
+        const slashIndex = changedPath.indexOf('/');
+        const changedPathWithoutProject = slashIndex > 0 
+          ? changedPath.substring(slashIndex + 1) 
+          : changedPath;
+        
         const currentFileName = filePath.split('/').pop() || filePath;
-        const changedFileName = changedPath.split('/').pop() || changedPath;
-        
+        const changedFileName = changedPathWithoutProject.split('/').pop() || changedPathWithoutProject;
+
         // 检查是否匹配：完全匹配 或 文件名匹配
-        const isExactMatch = changedPath === filePath;
-        const isNameMatch = currentFileName === changedFileName && 
-                           changedPath.includes(filePath);
-        
+        const isExactMatch = changedPathWithoutProject === filePath;
+        const isNameMatch = currentFileName === changedFileName;
+
         if (isExactMatch || isNameMatch) {
           console.log('📝 检测到文件变化，重新加载:', filePath, '变更路径:', changedPath);
-          // 直接获取最新文件内容并更新 srcDoc
+          // 使用不包含项目名的路径获取文件内容
           try {
-            const projectName = changedPath.split('/')[0] || 'project-1';
-            const relativePath = changedPath.substring(projectName.length + 1);
-            const content = await api.getFileContent(projectName, relativePath);
+            const content = await api.getFileContent(projectName, changedPathWithoutProject);
             setSrcDoc(content);
             setCurrentCode(content);
             setError(null);
@@ -187,8 +337,10 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
 
   // 保存文件
   const handleSave = async (content: string) => {
-    if (!filePath) return;
-    await api.saveFileContent('project-1', filePath, content);
+    if (!filePath || !projectName) return;
+    // filePath 格式：project-1/index.html，需要提取相对路径
+    const relativePath = filePath.includes('/') ? filePath.substring(filePath.indexOf('/') + 1) : filePath;
+    await api.saveFileContent(projectName, relativePath, content);
     // 通知父组件文件已更改
     onFileChange?.(filePath);
   };
@@ -313,7 +465,8 @@ export function RenderFrame({ filePath, fileContent, onFileChange, onElementSele
                 srcDoc={srcDoc}
                 onLoad={handleIframeLoad}
                 onError={handleIframeError}
-                sandbox="allow-scripts allow-same-origin allow-forms"
+                // sandbox 属性：允许脚本、同源访问、表单、内联资源加载
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
                 style={{ width: '100%', height: '100%', border: 'none' }}
               />
               {uiSelectorEnabled && (

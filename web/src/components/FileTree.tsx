@@ -17,6 +17,22 @@ interface FileTreeNodeProps {
   onRefresh: () => void;
 }
 
+/**
+ * 将文件树中的路径转换为相对于项目目录的路径
+ * 文件树中的 file.path 格式：project-1/assets/image.png 或 project-1/index.html
+ * 后端 API 期望的路径格式：assets/image.png 或 index.html（相对于项目目录）
+ */
+function getRelativePath(filePath: string, projectName: string): string {
+  // 如果路径以项目名开头，去掉项目名前缀
+  if (filePath.startsWith(projectName + '/')) {
+    return filePath.substring(projectName.length + 1);
+  }
+  if (filePath === projectName) {
+    return '';
+  }
+  return filePath;
+}
+
 // 文件树节点组件
 function FileTreeNode({ file, level, projectName, onSelectFile, selectedPath, onRefresh }: FileTreeNodeProps) {
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -64,10 +80,12 @@ function FileTreeNode({ file, level, projectName, onSelectFile, selectedPath, on
   const handleCreateFolder = async () => {
     const name = prompt('请输入文件夹名称:');
     if (!name) return;
-    
-    const basePath = file.type === 'folder' ? file.path : file.path.substring(0, file.path.lastIndexOf('/'));
-    const newPath = `${basePath}/${name}`;
-    
+
+    // 转换为相对路径（去掉项目名前缀）
+    const relativePath = getRelativePath(file.path, projectName);
+    const basePath = file.type === 'folder' ? relativePath : relativePath.substring(0, relativePath.lastIndexOf('/'));
+    const newPath = basePath ? `${basePath}/${name}` : name;
+
     await api.createFolder(projectName, newPath);
     onRefresh();
   };
@@ -76,10 +94,12 @@ function FileTreeNode({ file, level, projectName, onSelectFile, selectedPath, on
   const handleCreateFile = async () => {
     const name = prompt('请输入文件名称 (如：page.html):');
     if (!name) return;
-    
-    const basePath = file.type === 'folder' ? file.path : file.path.substring(0, file.path.lastIndexOf('/'));
-    const newPath = `${basePath}/${name}`;
-    
+
+    // 转换为相对路径（去掉项目名前缀）
+    const relativePath = getRelativePath(file.path, projectName);
+    const basePath = file.type === 'folder' ? relativePath : relativePath.substring(0, relativePath.lastIndexOf('/'));
+    const newPath = basePath ? `${basePath}/${name}` : name;
+
     let defaultContent = '';
     if (name.endsWith('.html')) {
       defaultContent = `<!DOCTYPE html>
@@ -98,7 +118,7 @@ function FileTreeNode({ file, level, projectName, onSelectFile, selectedPath, on
     } else if (name.endsWith('.js')) {
       defaultContent = `// ${name}\n`;
     }
-    
+
     await api.createFile(projectName, newPath, defaultContent);
     onRefresh();
   };
@@ -112,10 +132,12 @@ function FileTreeNode({ file, level, projectName, onSelectFile, selectedPath, on
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    
+
     setUploading(true);
     try {
-      const targetPath = file.type === 'folder' ? file.path : file.path.substring(0, file.path.lastIndexOf('/'));
+      // 转换为相对路径（去掉项目名前缀）
+      const relativePath = getRelativePath(file.path, projectName);
+      const targetPath = file.type === 'folder' ? relativePath : relativePath.substring(0, relativePath.lastIndexOf('/'));
       await api.uploadFiles(projectName, e.target.files, targetPath);
       onRefresh();
     } catch (error) {
@@ -132,20 +154,29 @@ function FileTreeNode({ file, level, projectName, onSelectFile, selectedPath, on
   // 删除
   const handleDelete = async () => {
     if (!confirm(`确定要删除 "${file.name}" 吗？此操作不可撤销！`)) return;
-    
-    await api.deleteItem(projectName, file.path);
+
+    // 转换为相对路径（去掉项目名前缀）
+    const relativePath = getRelativePath(file.path, projectName);
+    await api.deleteItem(projectName, relativePath);
     onRefresh();
   };
 
   // 重命名
   const handleRename = async () => {
+    setShowContextMenu(false);
     const newName = prompt('请输入新名称:', file.name);
     if (!newName || newName === file.name) return;
+
+    // 转换为相对路径（去掉项目名前缀）
+    const relativePath = getRelativePath(file.path, projectName);
     
-    const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
-    const newPath = parentPath ? `${parentPath}/${newName}` : newName;
-    
-    await api.renameItem(projectName, file.path, newPath);
+    // 计算新路径：保留父目录，只修改文件名
+    const lastSlashIndex = relativePath.lastIndexOf('/');
+    const newPath = lastSlashIndex === -1
+      ? newName  // 文件在根目录，直接重命名
+      : `${relativePath.substring(0, lastSlashIndex)}/${newName}`;  // 保留父路径
+
+    await api.renameItem(projectName, relativePath, newPath);
     onRefresh();
   };
 
@@ -251,9 +282,10 @@ export function FileTree({ projectName, onSelectFile, selectedPath }: FileTreePr
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    
+
     setUploading(true);
     try {
+      // 根目录上传，targetPath 为空字符串
       await api.uploadFiles(projectName, e.target.files, '');
       loadFiles();
     } catch (error) {

@@ -197,28 +197,30 @@ app.delete('/api/projects/:projectName', async (req, res) => {
       });
 
       newWatcher.on('change', (filePath) => {
-        const relativePath = path.relative(PROJECTS_DIR, filePath);
+        // 获取相对于 PROJECTS_DIR 的路径（包含项目名）
+        // 例如：C:/.../projects/project-1/assets/file.json -> project-1/assets/file.json
+        const fullPath = path.relative(PROJECTS_DIR, filePath).replace(/\\/g, '/');
         ws.send(JSON.stringify({
           type: 'file-change',
-          path: relativePath,
+          path: fullPath,
           timestamp: Date.now()
         }));
       });
 
       newWatcher.on('add', (filePath) => {
-        const relativePath = path.relative(PROJECTS_DIR, filePath);
+        const fullPath = path.relative(PROJECTS_DIR, filePath).replace(/\\/g, '/');
         ws.send(JSON.stringify({
           type: 'file-add',
-          path: relativePath,
+          path: fullPath,
           timestamp: Date.now()
         }));
       });
 
       newWatcher.on('unlink', (filePath) => {
-        const relativePath = path.relative(PROJECTS_DIR, filePath);
+        const fullPath = path.relative(PROJECTS_DIR, filePath).replace(/\\/g, '/');
         ws.send(JSON.stringify({
           type: 'file-delete',
-          path: relativePath,
+          path: fullPath,
           timestamp: Date.now()
         }));
       });
@@ -274,15 +276,25 @@ app.get('/api/file', async (req, res) => {
 app.get('/api/file/blob', async (req, res) => {
   try {
     const projectName = req.query.project as string || 'project-1';
-    const filePath = req.query.path as string;
-    
+    let filePath = req.query.path as string;
+
+    // URL 解码：处理中文字符
+    // 浏览器发送的 URL 会自动编码，如：胡图.png -> %E8%83%A1%E5%9B%BE.png
+    try {
+      filePath = decodeURIComponent(filePath);
+    } catch (e) {
+      console.log('路径解码失败，使用原始路径:', e);
+    }
+
     console.log('📥 Blob API 请求:', {
       project: projectName,
       path: filePath,
       query: req.query
     });
-    
-    const fullPath = path.join(PROJECTS_DIR, projectName, filePath);
+
+    // 统一路径分隔符：将 / 转换为平台特定分隔符
+    const normalizedPath = filePath.replace(/\//g, path.sep);
+    const fullPath = path.join(PROJECTS_DIR, projectName, normalizedPath);
 
     console.log('📁 完整路径:', fullPath);
 
@@ -320,6 +332,7 @@ app.get('/api/file/blob', async (req, res) => {
     const contentType = mimeTypes[ext] || 'application/octet-stream';
 
     res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(fileBuffer);
   } catch (error) {
     console.error('❌ Blob API 错误:', error);
@@ -422,16 +435,23 @@ app.post('/api/rename', async (req, res) => {
   try {
     const projectName = req.body.project || 'project-1';
     const { oldPath, newPath } = req.body;
-    const oldFullPath = path.join(PROJECTS_DIR, projectName, oldPath);
-    const newFullPath = path.join(PROJECTS_DIR, projectName, newPath);
     
+    // 统一使用正斜杠 / 作为路径分隔符
+    const normalizedOldPath = oldPath.replace(/\\/g, '/');
+    const normalizedNewPath = newPath.replace(/\\/g, '/');
+    
+    // 使用 path.normalize 处理路径（将 / 转换为平台特定分隔符）
+    const oldFullPath = path.join(PROJECTS_DIR, projectName, path.normalize(normalizedOldPath));
+    const newFullPath = path.join(PROJECTS_DIR, projectName, path.normalize(normalizedNewPath));
+
     if (!oldFullPath.startsWith(PROJECTS_DIR) || !newFullPath.startsWith(PROJECTS_DIR)) {
       return res.status(403).json({ success: false, error: 'Invalid path' });
     }
-    
+
     await fs.promises.rename(oldFullPath, newFullPath);
     res.json({ success: true });
   } catch (error) {
+    console.error('重命名失败:', error);
     res.status(500).json({ success: false, error: 'Failed to rename item' });
   }
 });
@@ -571,7 +591,8 @@ async function getFilesRecursively(dir: string, baseDir = dir): Promise<Array<{ 
       if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
 
       const fullPath = path.join(dir, entry.name);
-      const relativePath = path.relative(baseDir, fullPath);
+      // 统一使用正斜杠 / 作为路径分隔符（兼容 Windows 和 Unix）
+      const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
 
       if (entry.isDirectory()) {
         const children = await getFilesRecursively(fullPath, baseDir);
