@@ -6,6 +6,7 @@ import { ModeSelector, UISelectorDisplay } from './components/UISelectorComponen
 import { type UISelectorInfo, type UIIntent } from './components/UISelector';
 import { api, type Project } from './api/client';
 import { copyIntentToClipboard } from './components/UISelectorComponents';
+import UserHeader from './components/UserHeader';
 import './components/UISelector.css';
 import './App.css';
 
@@ -13,7 +14,7 @@ type LeftPanelTab = 'files' | 'ui' | 'terminal';
 
 function App() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>('project-1');
+  const [selectedProject, setSelectedProject] = useState<string>('');
   const [selectedPath, setSelectedPath] = useState<string>('');
   const [fileContent, setFileContent] = useState<string>('');
   const [lastIntent, setLastIntent] = useState<UIIntent | null>(null);
@@ -184,6 +185,11 @@ function App() {
 
   return (
     <div className="app">
+      {/* 顶部用户信息栏 */}
+      <div className="app-top-bar">
+        <UserHeader onLogout={() => window.location.reload()} />
+      </div>
+
       {/* 顶部容器 - 左侧面板 + 右侧渲染区 */}
       <div className="panel-top-container">
         {/* 左侧面板 - 带选项卡切换 */}
@@ -309,7 +315,7 @@ function App() {
             {/* 终端面板 */}
             <div className={`panel-section ${leftPanelTab === 'terminal' ? 'active' : ''}`}>
               <div className="panel-terminal-full">
-                <Terminal cwd={`F:\\js-vue-project\\productManager\\axure\\projects\\${selectedProject}`} />
+                <Terminal projectName={selectedProject} />
               </div>
             </div>
           </div>

@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                  String         @id @default(uuid())
+  username            String         @unique
+  email               String         @unique
+  passwordHash        String         @map("password_hash")
+  role                Role           @default("USER")
+  avatarUrl           String?        @map("avatar_url")
+  status              UserStatus     @default("ACTIVE")
+  failedLogins        Int            @default(0) @map("failed_logins")
+  lockedUntil         DateTime?      @map("locked_until")
+  forcePasswordChange Boolean        @default(false) @map("force_password_change")
+  passwordResetBy     String?        @map("password_reset_by")
+  passwordResetAt     DateTime?      @map("password_reset_at")
+  lastLoginAt         DateTime?      @map("last_login_at")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  projects            Project[]
+  refreshTokens       RefreshToken[]
+
+  @@map("users")
+}
+
+model Project {
+  id        String   @id @default(uuid())
+  name      String
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@map("projects")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  actorId   String   @map("actor_id")
+  targetId  String   @map("target_id")
+  details   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  DISABLED
+}

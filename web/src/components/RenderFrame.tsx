@@ -70,8 +70,12 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
   // 优势：本地/云端都适用，浏览器自动缓存，无需清理 Blob
   const getMediaUrl = (projectName: string, filePath: string) => {
     // 使用当前 API 基础 URL（自动适配本地和云端）
-    const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.protocol + '//' + window.location.hostname + ':3001';
-    return `${apiBaseUrl}/api/file/blob?project=${projectName}&path=${encodeURIComponent(filePath)}`;
+    // 注意：API_BASE_URL 已经包含 /api 后缀
+    const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.protocol + '//' + window.location.hostname + ':3001/api';
+    // 从 localStorage 获取 token 并附加到 URL
+    const token = localStorage.getItem('accessToken');
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+    return `${apiBaseUrl}/file/blob?project=${projectName}&path=${encodeURIComponent(filePath)}${tokenParam}`;
   };
 
   // 为 HTML 内容添加 base 标签，解决相对路径问题
@@ -90,13 +94,17 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
     const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
 
     // 构建 API 基础 URL
-    const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.protocol + '//' + window.location.hostname + ':3001';
+    const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.protocol + '//' + window.location.hostname + ':3001/api';
 
     console.log('[addBaseTag]', { filePath, htmlProjectName, dirPath });
 
+    // 从 localStorage 获取 token
+    const token = localStorage.getItem('accessToken');
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+
     // 构建资源路径转换函数
     const buildResourceUrl = (resourcePath: string) => {
-      return `${apiBaseUrl}/api/file/blob?project=${htmlProjectName}&path=${encodeURIComponent(resourcePath)}`;
+      return `${apiBaseUrl}/file/blob?project=${htmlProjectName}&path=${encodeURIComponent(resourcePath)}${tokenParam}`;
     };
 
     // 替换 HTML 中的相对资源路径为绝对 API URL

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { getToken } from '../api/client';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
   cwd?: string;
+  projectName?: string;
 }
 
-export function Terminal({ cwd }: TerminalProps) {
+export function Terminal({ cwd, projectName }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -68,9 +70,20 @@ export function Terminal({ cwd }: TerminalProps) {
     // 先显示连接中状态
     term.write('\r\n\x1b[33m🔌 正在连接终端...\x1b[0m\r\n\r\n');
 
-    // 连接 WebSocket 到后端 PTY
-    const targetCwd = cwd || 'F:\\js-vue-project\\productManager\\axure\\projects';
-    const wsUrl = `ws://localhost:3002?terminal=true&session=${sessionId.current}&cwd=${encodeURIComponent(targetCwd)}`;
+    // 获取当前用户的项目目录
+    const token = getToken();
+    let targetCwd = cwd;
+    
+    if (!targetCwd && projectName) {
+      // 使用用户项目目录
+      targetCwd = `project:${projectName}`;
+    } else if (!targetCwd) {
+      // 默认使用用户项目根目录
+      targetCwd = 'project:';
+    }
+
+    // 连接 WebSocket 到后端 PTY - 添加 token 认证
+    const wsUrl = `ws://localhost:3002?terminal=true&session=${sessionId.current}&project=${encodeURIComponent(projectName || '')}&token=${token || ''}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
