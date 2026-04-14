@@ -196,6 +196,42 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
       }
     );
 
+    // 注入全局样式：统一处理 code/pre 标签的换行行为
+    const injectedStyles = `
+    <style>
+      /* 代码块：保留原始格式 + 自动换行 */
+      pre, pre code {
+        white-space: pre-wrap !important;
+        overflow-wrap: break-word !important;
+        word-break: break-word !important;
+        tab-size: 2;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      /* 行内代码：不换行，超长时省略号 */
+      :not(pre) > code {
+        white-space: nowrap !important;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: inline-block;
+        vertical-align: baseline;
+      }
+      /* 确保所有内容不溢出容器 */
+      pre, code, p, li, blockquote, td, th, h1, h2, h3, h4, h5, h6 {
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+    </style>
+    `;
+
+    // 在 </head> 前注入样式，如果没有 </head> 则在内容最前插入
+    if (processedHtml.includes('</head>')) {
+      processedHtml = processedHtml.replace('</head>', injectedStyles + '</head>');
+    } else {
+      processedHtml = injectedStyles + processedHtml;
+    }
+
     console.log('[addBaseTag] 原始 HTML:', html.substring(0, 500));
     console.log('[addBaseTag] 处理后 HTML:', processedHtml.substring(0, 500));
 

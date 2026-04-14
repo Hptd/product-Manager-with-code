@@ -1,6 +1,5 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
 import './MarkdownViewer.css';
 
 interface MarkdownViewerProps {
@@ -17,7 +16,6 @@ export function MarkdownViewer({ content, fileName }: MarkdownViewerProps) {
       <div className="markdown-content">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
           components={{
             // 自定义渲染组件
             h1: ({ node, ...props }) => <h1 className="md-h1" {...props} />,
@@ -29,8 +27,7 @@ export function MarkdownViewer({ content, fileName }: MarkdownViewerProps) {
               <a className="md-link" target="_blank" rel="noopener noreferrer" {...props} />
             ),
             code: ({ node, inline, className, children, ...props }: any) => {
-              const match = /language-(\w+)/.exec(className || '');
-              return !inline && match ? (
+              return !inline ? (
                 <pre className="md-code-block">
                   <code className={className} {...props}>
                     {children}
@@ -41,6 +38,10 @@ export function MarkdownViewer({ content, fileName }: MarkdownViewerProps) {
                   {children}
                 </code>
               );
+            },
+            pre: ({ node, ...props }) => {
+              // pre 已经被 code 包装处理，如果单独出现则直接渲染
+              return <>{props.children}</>;
             },
             blockquote: ({ node, ...props }) => (
               <blockquote className="md-blockquote" {...props} />

@@ -26,9 +26,14 @@
 .markdown-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 24px 32px;
   color: #24292e;
   line-height: 1.6;
+  text-align: left;
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 /* 标题样式 */
@@ -39,6 +44,9 @@
   padding-bottom: 0.3em;
   border-bottom: 1px solid #eaecef;
   color: #0366d6;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .md-h2 {
@@ -48,6 +56,9 @@
   padding-bottom: 0.3em;
   border-bottom: 1px solid #eaecef;
   color: #0366d6;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .md-h3 {
@@ -55,6 +66,9 @@
   font-weight: 600;
   margin: 24px 0 16px;
   color: #24292e;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .md-h4 {
@@ -62,11 +76,17 @@
   font-weight: 600;
   margin: 24px 0 16px;
   color: #24292e;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* 段落样式 */
 .md-p {
   margin: 0 0 16px;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* 链接样式 */
@@ -84,17 +104,24 @@
   background: #f6f8fa;
   padding: 16px;
   border-radius: 6px;
-  overflow-x: auto;
+  overflow-x: hidden;
   margin: 16px 0;
   position: relative;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .md-code-block code {
-  background: transparent;
-  padding: 0;
+  background: transparent !important;
+  padding: 0 !important;
   font-size: 85%;
   font-family: 'Consolas', 'Courier New', monospace;
   color: #24292e;
+  white-space: pre-wrap !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  tab-size: 2;
+  display: block;
 }
 
 .md-inline-code {
@@ -104,6 +131,11 @@
   font-size: 85%;
   font-family: 'Consolas', 'Courier New', monospace;
   color: #e83e8c;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: baseline;
 }
 
 /* 引用样式 */
@@ -114,6 +146,10 @@
   color: #6a737d;
   background: rgba(3, 102, 214, 0.05);
   border-radius: 0 4px 4px 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  box-sizing: border-box;
 }
 
 /* 列表样式 */
@@ -133,16 +169,21 @@
 
 .md-li {
   margin: 4px 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* 表格样式 */
 .md-table-wrapper {
   overflow-x: auto;
   margin: 16px 0;
+  max-width: 100%;
 }
 
 .md-table {
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   border-spacing: 0;
 }
