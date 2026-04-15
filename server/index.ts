@@ -13,7 +13,8 @@ import filesRouter from './src/routes/files.js';
 import { initializeAdminUser } from './src/utils/initAdmin.js';
 import { verifyWebSocketToken } from './src/middleware/auth.js';
 import { getUserProjectsDir } from './src/utils/userProjects.js';
-const pty = require('node-pty');
+import { createSandbox, getSandboxStream, updateSandboxActivity, destroySandbox } from './src/utils/sandbox.js';
+import pty from 'node-pty';
 
 // 加载环境变量
 dotenv.config();
@@ -53,9 +54,9 @@ const server = app.listen(PORT, HOST, async () => {
 });
 
 // 启动 WebSocket 服务用于热更新和终端
-const wss = new WebSocketServer({ port: WS_PORT });
+const wss = new WebSocketServer({ port: WS_PORT, host: HOST });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', async (ws, req) => {
   const url = new URL(req.url || '', `ws://localhost:${WS_PORT}`);
   
   // WebSocket 认证验证
@@ -89,67 +90,40 @@ wss.on('connection', (ws, req) => {
     const displayName = project || 'projects';
 
     try {
-      const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
-      let args: string[];
+      // ✅ 使用沙箱容器代替宿主机进程
+      console.log(`📦 创建沙箱终端: user=${userId}, project=${displayName}`);
 
-      if (process.platform === 'win32') {
-        // Windows PowerShell: 自定义提示符只显示项目名称，隐藏真实路径
-        const escapedCwd = cwd.replace(/"/g, '`"');
-        const psInit = `Set-Location "${escapedCwd}"; function global:prompt { Write-Host "PS F:\\${displayName}" -NoNewline -ForegroundColor Cyan; Write-Host ">" -NoNewline -ForegroundColor Gray; return " " }; Write-Host "终端已连接到项目: ${displayName}" -ForegroundColor Green; Write-Host ""`;
-        args = ['-NoExit', '-NoProfile', '-Command', psInit];
-      } else {
-        // Linux/Mac bash
-        args = ['-c', `cd "${cwd}" && export PS1="\\u@\\h:${displayName} \\$ "`];
-      }
+      const { stream } = await createSandbox(sessionId, userId, project, cwd);
 
-      console.log(`📌 Spawning terminal: ${shell} (project: ${displayName})`);
+      console.log(`✅ 沙箱终端已创建: session=${sessionId}`);
 
-      const ptyProcess = pty.spawn(shell, args, {
-        name: 'xterm-256color',
-        cols: 120,
-        rows: 30,
-        cwd,
-        env: { ...process.env }
-      });
-
-      terminalSessions.set(sessionId, ptyProcess);
-      console.log(`✅ Terminal session ${sessionId} created, PID: ${ptyProcess.pid}`);
-
-      // 终端输出 → 前端
-      ptyProcess.onData((data: string) => {
+      // 沙箱输出 → 前端
+      stream.on('data', (data: Buffer) => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({
             type: 'terminal-data',
             session: sessionId,
-            data
+            data: data.toString()
           }));
         }
       });
 
-      ptyProcess.onExit(({ exitCode, signal }: { exitCode: number | null, signal: number | null }) => {
-        console.log(`🚪 Terminal exited: ${exitCode}, signal: ${signal}`);
-        terminalSessions.delete(sessionId);
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'terminal-exit',
-            session: sessionId,
-            exitCode,
-            signal
-          }));
-        }
-      });
-
-      // 前端输入 → 终端
-      ws.on('message', (message) => {
+      // 前端输入 → 沙箱
+      ws.on('message', async (message) => {
         try {
           const msg = JSON.parse(message.toString());
 
           if (msg.type === 'terminal-input' && msg.session === sessionId) {
-            ptyProcess.write(msg.data);
+            // 写入沙箱标准输入
+            stream.write(msg.data);
+            
+            // 更新活动时间
+            updateSandboxActivity(sessionId);
           }
 
           if (msg.type === 'terminal-resize' && msg.session === sessionId) {
-            ptyProcess.resize(msg.cols, msg.rows);
+            // Docker exec 不支持动态调整终端大小
+            console.log(`⚠️  终端大小调整请求 (Docker 不支持动态调整): ${msg.cols}x${msg.rows}`);
           }
         } catch (error) {
           console.error('Error handling terminal message:', error);
@@ -158,12 +132,7 @@ wss.on('connection', (ws, req) => {
 
       ws.on('close', () => {
         console.log(`🔌 Terminal session ${sessionId} closed`);
-        try {
-          ptyProcess.kill();
-        } catch (error) {
-          console.error('Error killing pty process:', error);
-        }
-        terminalSessions.delete(sessionId);
+        destroySandbox(sessionId);
       });
 
       ws.on('error', (error) => {

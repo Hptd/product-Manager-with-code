@@ -1,10 +1,11 @@
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 // 获取当前文件所在目录（server/src/utils）
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = dirname(__filename);
 // PROJECT_ROOT 是 server 目录的父目录（项目根目录）
 // __dirname -> server/src/utils
 // .. -> server/src

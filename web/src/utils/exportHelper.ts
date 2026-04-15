@@ -19,7 +19,7 @@ export interface ResourceFile {
  */
 export function extractResourcePaths(htmlContent: string, htmlFilePath: string): string[] {
   const paths = new Set<string>();
-  const apiBaseUrl = 'http://localhost:3001/api/file/blob';
+  const apiBaseUrl = 'http://localhost:8001/api/file/blob';
 
   // 提取 HTML 属性中的路径 (src="xxx", href="xxx")
   const attrRegex = /(?:src|href)\s*=\s*["']([^"']+)["']/gi;
@@ -98,7 +98,7 @@ function normalizePath(path: string, apiBaseUrl: string): string | null {
  */
 export function convertApiPathsToRelative(
   htmlContent: string,
-  apiBaseUrl: string = 'http://localhost:3001/api/file/blob'
+  apiBaseUrl: string = 'http://localhost:8001/api/file/blob'
 ): string {
   let processedHtml = htmlContent;
 

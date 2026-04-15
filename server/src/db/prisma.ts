@@ -1,11 +1,11 @@
 // Prisma Client 单例
-import { PrismaClient } from '../../generated/prisma/index.js';
+import { PrismaClient } from '@prisma/client';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
 // tsx 运行时支持 import.meta，但需要运行时获取路径
-const dbPath = process.env.DATABASE_URL 
+const dbPath = process.env.DATABASE_URL
   ? process.env.DATABASE_URL.replace('file:', '')
   : path.join(process.cwd(), 'data.db');
 

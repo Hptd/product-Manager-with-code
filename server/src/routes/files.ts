@@ -123,8 +123,9 @@ router.get('/file/blob', async (req: Request, res: Response) => {
       // 使用与 userProjects.ts 相同的方式获取项目根目录
       // files.ts 在 server/src/routes 目录下
       const { fileURLToPath } = await import('url');
+      const { dirname } = await import('path');
       const __filename2 = fileURLToPath(import.meta.url);
-      const __dirname2 = path.dirname(__filename2);
+      const __dirname2 = dirname(__filename2);
       // __dirname2 -> server/src/routes
       // .. -> server/src
       // ../.. -> server

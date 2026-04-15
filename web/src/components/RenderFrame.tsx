@@ -69,9 +69,8 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
   // 直接返回 API 端点 URL，让浏览器自行加载
   // 优势：本地/云端都适用，浏览器自动缓存，无需清理 Blob
   const getMediaUrl = (projectName: string, filePath: string) => {
-    // 使用当前 API 基础 URL（自动适配本地和云端）
-    // 注意：API_BASE_URL 已经包含 /api 后缀
-    const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.protocol + '//' + window.location.hostname + ':3001/api';
+    // 使用相对路径，通过 Vite 代理转发到后端
+    const apiBaseUrl = '/api';
     // 从 localStorage 获取 token 并附加到 URL
     const token = localStorage.getItem('accessToken');
     const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
@@ -88,13 +87,13 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
     // filePath 格式：indexx.html 或 assets/file.html（相对于项目目录）
     // 直接使用组件 prop 中的 projectName
     const htmlProjectName = projectName || 'project-1';
-    
+
     // 计算文件所在目录
     const parts = filePath.split('/');
     const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
 
-    // 构建 API 基础 URL
-    const apiBaseUrl = import.meta.env.VITE_API_URL || window.location.protocol + '//' + window.location.hostname + ':3001/api';
+    // 构建 API 基础 URL（使用相对路径）
+    const apiBaseUrl = '/api';
 
     console.log('[addBaseTag]', { filePath, htmlProjectName, dirPath });
 
@@ -320,7 +319,7 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
 
   // 处理热更新消息
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:3002');
+    const ws = new WebSocket('ws://localhost:8002');
 
     ws.onopen = () => {
       console.log('🔌 热更新 WebSocket 已连接');

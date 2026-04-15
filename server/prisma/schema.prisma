@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -12,9 +11,9 @@ model User {
   username            String         @unique
   email               String         @unique
   passwordHash        String         @map("password_hash")
-  role                Role           @default("USER")
+  role                Role           @default(USER)
   avatarUrl           String?        @map("avatar_url")
-  status              UserStatus     @default("ACTIVE")
+  status              UserStatus     @default(ACTIVE)
   failedLogins        Int            @default(0) @map("failed_logins")
   lockedUntil         DateTime?      @map("locked_until")
   forcePasswordChange Boolean        @default(false) @map("force_password_change")

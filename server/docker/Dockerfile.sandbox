@@ -1,0 +1,48 @@
+# 基于 Ubuntu 22.04 提供完整的"新电脑"体验
+FROM ubuntu:22.04
+
+# 避免交互式提示
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 安装完整的开发环境
+RUN apt-get update && apt-get install -y \
+    # Shell 和编辑器
+    bash vim nano sudo \
+    # 网络工具
+    curl wget git \
+    # Node.js 开发环境
+    nodejs npm \
+    # Python 开发环境
+    python3 python3-pip python3-venv \
+    # 常用工具
+    zip unzip jq tree htop \
+    # 文件操作
+    file less man-db \
+    # 清理缓存减小镜像体积
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && npm cache clean --force
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 自定义 Bash 提示符和欢迎信息
+RUN echo '# 欢迎信息' > /root/.bashrc && \
+    echo 'echo "========================================"' >> /root/.bashrc && \
+    echo 'echo "  🖥️  欢迎使用开发环境"' >> /root/.bashrc && \
+    echo 'echo "  项目目录: /workspace"' >> /root/.bashrc && \
+    echo 'echo "  这是一个独立的沙箱环境"' >> /root/.bashrc && \
+    echo 'echo "========================================"' >> /root/.bashrc && \
+    echo 'echo ""' >> /root/.bashrc && \
+    echo '# 自定义提示符' >> /root/.bashrc && \
+    echo 'export PS1="🔧 [\u@\h \W]\\$ "' >> /root/.bashrc && \
+    echo 'export TERM=xterm-256color' >> /root/.bashrc
+
+# 设置基础环境变量
+ENV HOME=/root
+ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
+ENV NODE_ENV=production
+ENV LANG=C.UTF-8
+
+# 默认启动 Bash
+CMD ["/bin/bash", "-l"]
