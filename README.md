@@ -1,55 +1,116 @@
 # AI Product Manager
 
-AI 对话驱动的产品管理系统 - 通过嵌入终端和 AI CLI 实现实时原型修改
+**AI 驱动的产品原型管理系统** — 将 Axure 原型与 AI CLI 工具无缝集成，实现实时预览、智能编辑和沙箱隔离的终端体验。
 
-## 🎯 项目特点
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
-- **📁 文件管理**: 浏览和管理 Axure 原型文件
-- **👁️ 实时预览**: iframe 渲染 HTML 效果，支持热更新
-- **🎯 UI 选择器**: 点击选择页面元素，查看组件信息
-- **✋ 拖拽/缩放**: 直接拖动调整元素位置和大小
-- **💻 嵌入终端**: 支持任意 AI CLI 工具（Qwen Code、Cursor、Claude Code 等）
-- **🔄 热更新**: 文件修改后自动刷新预览
+---
 
-## 📦 项目结构
+## 📖 目录
+
+- [功能特点](#-功能特点)
+- [快速开始](#-快速开始)
+- [核心功能详解](#-核心功能详解)
+- [技术架构](#-技术架构)
+- [API 接口](#-api-接口)
+- [部署指南](#-部署指南)
+- [开发指南](#-开发指南)
+- [常见问题](#-常见问题)
+
+---
+
+## ✨ 功能特点
+
+### 🎯 核心能力
+
+| 功能 | 描述 |
+|------|------|
+| **📁 多项目管理** | 创建、删除、切换独立项目，每个项目拥有独立文件空间 |
+| **👁️ 实时预览** | iframe 渲染 HTML/CSS/JS，支持热更新自动刷新 |
+| **🎨 UI 选择器** | 点击选择页面元素，查看完整 DOM 信息与样式 |
+| **✋ 拖拽/缩放** | 直接拖动元素调整位置，拖拽边角调整尺寸 |
+| **💻 沙箱终端** | Docker 隔离的终端环境，支持任意 AI CLI 工具 |
+| **🔐 用户系统** | 完整的注册/登录、JWT 认证、权限管理 |
+
+### 🛠️ 文件管理
+
+- **文件浏览**: 树形结构展示项目文件，支持展开/收起
+- **文件操作**: 新建文件/文件夹、上传、重命名、删除
+- **多格式支持**: HTML、CSS、JS、JSON、Markdown、图片、视频
+- **代码编辑**: 内置代码编辑器，支持语法高亮和保存
+- **资源导出**: 一键导出 HTML 及所有依赖资源为 ZIP
+
+### 🎨 UI 选择系统
+
+基于 `ai-ui-runtime` 设计理念，提供四种操作模式：
+
+| 模式 | 功能 | 颜色 |
+|------|------|------|
+| **选择 (Select)** | 点击元素查看详情 | 🔵 蓝色 |
+| **移动 (Move)** | 拖拽元素调整位置 | 🟢 绿色 |
+| **缩放 (Resize)** | 拖拽边角调整尺寸 | 🟠 橙色 |
+| **描述 (Describe)** | 生成元素自然语言描述 | 🟣 紫色 |
+
+**元素信息展示**:
+- DOM 路径、CSS 选择器
+- 标签名、类名、ID
+- 位置坐标、尺寸
+- 完整属性列表
+- 计算样式
+- 无障碍属性
+
+### 💻 沙箱终端
+
+每个终端会话都是独立的 Docker 容器：
 
 ```
-productManager/
-├── server/              # Node.js 后端服务
-│   ├── index.ts         # 服务器入口
-│   ├── package.json
-│   └── tsconfig.json
-├── web/                 # React 前端应用
-│   ├── src/
-│   │   ├── api/         # API 客户端
-│   │   ├── components/  # React 组件
-│   │   │   ├── FileTree.tsx       # 文件树
-│   │   │   ├── RenderFrame.tsx    # 渲染区
-│   │   │   ├── Terminal.tsx       # 终端
-│   │   │   └── UISelector.tsx     # UI 选择器
-│   │   ├── App.tsx      # 主应用
-│   │   └── App.css      # 样式
-│   ├── package.json
-│   └── vite.config.ts
-├── axure/               # Axure 原型文件（被管理）
-├── package.json         # 根项目配置
-├── PROJECT_PLAN.md      # 项目规划
-└── README.md            # 本文档
+┌─────────────────────────────────────────┐
+│  🐳 Docker 沙箱容器                      │
+│  ├─ 独立文件系统 (挂载用户项目目录)       │
+│  ├─ 独立环境变量 (用户自定义配置)         │
+│  ├─ 资源限制 (2GB 内存 + 1 CPU 核心)      │
+│  └─ 自动清理 (30 分钟无活动自动销毁)      │
+└─────────────────────────────────────────┘
 ```
+
+**支持的 AI CLI 工具**:
+```bash
+qwen-code "修改页面标题为红色"
+cursor "给按钮添加 hover 效果"
+claude "优化页面布局"
+aider "重构这个组件"
+```
+
+---
 
 ## 🚀 快速开始
+
+### 前置要求
+
+- Node.js 20+
+- npm 或 yarn
+- (可选) Docker Desktop - 用于沙箱终端功能
 
 ### 安装依赖
 
 ```bash
-# 安装根项目依赖
+# 1. 安装根项目依赖
 npm install
 
-# 安装后端依赖
+# 2. 安装后端依赖
 cd server && npm install
 
-# 安装前端依赖
+# 3. 安装前端依赖
 cd ../web && npm install
+```
+
+### 初始化数据库
+
+```bash
+cd server
+npx prisma generate
+npx prisma db push
 ```
 
 ### 启动开发环境
@@ -68,115 +129,411 @@ cd web && npm run dev
 
 ### 访问应用
 
-在浏览器打开：**http://localhost:3000**
+1. 浏览器打开：**http://localhost:3000**
+2. 注册账号并登录
+3. 创建新项目
+4. 开始使用！
 
-## 📖 使用说明
+---
 
-### 1. 查看原型
+## 📖 核心功能详解
 
-1. 左侧文件树浏览 `axure/` 目录下的文件
-2. 点击 HTML 文件在中间区域预览
-3. 文件夹可展开/收起
+### 1. 项目管理
 
-### 2. UI 元素选择与调整
-
-1. 勾选右上角 "🎯 UI 选择器" 启用选择功能
-2. 点击 iframe 内的任意元素进行选择
-3. 查看组件信息（标签、类名、DOM 路径、位置尺寸）
-4. **拖拽移动**: 拖动元素调整位置
-5. **缩放调整**: 拖动元素右下角调整大小
-6. 所有操作会生成 UI Intent 并输出到控制台
-
-### 3. 使用 AI CLI 修改文件
-
-在右侧终端执行任意 AI CLI 命令：
-
-```bash
-# 示例（具体命令取决于你使用的 AI CLI 工具）
-qwen-code "把 page_1.html 的标题改成红色"
-# 或
-cursor "给按钮添加 hover 效果"
-# 或
-claude "优化这个页面的布局"
+#### 创建项目
+```
+1. 点击右上角 ➕ 按钮
+2. 输入项目名称
+3. 点击"创建"
+4. 系统自动生成默认 index.html
 ```
 
-修改后预览区会自动刷新。
+#### 切换项目
+```
+1. 点击项目名称下拉框
+2. 选择目标项目
+3. 自动切换到该项目的工作区
+```
 
-### 4. 热更新测试
+#### 删除项目
+```
+1. 点击项目名旁的 🗑️ 图标
+2. 确认删除操作
+3. 项目文件与数据库记录同时删除
+```
 
-1. 使用外部编辑器修改 `axure/` 下的 HTML 文件
-2. 保存文件
-3. 预览区自动刷新显示最新效果
+### 2. 文件管理
 
-## 🛠️ 技术栈
+#### 文件树操作
 
-| 层级 | 技术 |
+| 操作 | 方法 |
 |------|------|
-| 前端框架 | React 18 + TypeScript |
-| 构建工具 | Vite |
-| 状态管理 | React Hooks |
-| 终端 | xterm.js |
-| 拖拽库 | interactjs |
-| 后端 | Node.js + Express |
-| WebSocket | ws |
-| 文件监听 | chokidar |
+| 展开文件夹 | 点击文件夹图标 |
+| 选择文件 | 点击文件名 |
+| 新建文件夹 | 右键 → 📁 新建文件夹 |
+| 新建文件 | 右键 → 📄 新建文件 |
+| 上传文件 | 右键 → 📤 上传文件 |
+| 重命名 | 右键 → ✏️ 重命名 |
+| 删除 | 右键 → 🗑️ 删除 |
+
+#### 支持的文件类型
+
+| 类型 | 扩展名 | 处理方式 |
+|------|--------|----------|
+| HTML | `.html`, `.htm` | 预览 + 代码编辑 |
+| 样式表 | `.css` | 代码编辑 |
+| JavaScript | `.js`, `.ts`, `.jsx`, `.tsx` | 代码编辑 |
+| 数据 | `.json`, `.xml`, `.yaml`, `.yml` | 代码编辑 |
+| 文档 | `.md`, `.markdown`, `.txt` | 预览/编辑 |
+| 图片 | `.png`, `.jpg`, `.gif`, `.svg`, `.webp` | 图片查看器 |
+| 视频 | `.mp4`, `.mov`, `.avi`, `.webm` | 视频播放器 |
+
+### 3. UI 选择器
+
+#### 启用方式
+```
+1. 选择 HTML 文件进入预览模式
+2. 点击右上角 "🎯 UI 选择器" 开关
+3. 选择操作模式（选择/移动/缩放/描述）
+```
+
+#### 操作流程
+
+**选择模式**:
+```
+1. 鼠标悬停 → 元素高亮 + 信息提示框
+2. 点击元素 → 固定高亮 + 详情面板更新
+3. 查看元素完整信息
+```
+
+**移动模式**:
+```
+1. 选择目标元素
+2. 切换到"移动"模式
+3. 拖拽元素到新位置
+4. 生成 Move Intent 输出到控制台
+```
+
+**缩放模式**:
+```
+1. 选择目标元素
+2. 切换到"缩放"模式
+3. 拖拽四角调整尺寸
+4. 生成 Resize Intent 输出到控制台
+```
+
+#### Intent 输出格式
+
+```typescript
+// 移动操作
+{
+  type: 'move',
+  widget_id: 'button.cta',
+  widget_path: 'html > body > div#app > button.cta',
+  widget_type: 'button',
+  before: { x: 100, y: 200, width: 120, height: 40 },
+  after: { x: 150, y: 180, width: 120, height: 40 }
+}
+
+// 缩放操作
+{
+  type: 'resize',
+  widget_id: 'div.container',
+  widget_path: 'html > body > div#app > div.container',
+  widget_type: 'div',
+  before: { x: 50, y: 50, width: 800, height: 600 },
+  after: { x: 50, y: 50, width: 1000, height: 700 }
+}
+
+// 描述操作
+{
+  type: 'describe',
+  widget_id: 'nav.main',
+  widget_path: 'html > body > nav.main',
+  widget_type: 'nav',
+  description: '主导航栏，包含 Logo 和三个菜单项'
+}
+```
+
+### 4. 沙箱终端
+
+#### 工作原理
+
+```
+用户点击终端
+    ↓
+创建 Docker 容器
+    ├─ 镜像：pm-sandbox:latest
+    ├─ 挂载：用户项目目录 → /workspace
+    ├─ 环境变量：USER_ID, PROJECT_NAME
+    └─ 资源限制：2GB 内存，1 CPU 核心
+    ↓
+返回终端流到前端
+    ↓
+用户执行命令 (AI CLI 等)
+    ↓
+关闭终端/超时 → 销毁容器
+```
+
+#### 配置环境变量
+
+编辑 `server/.env`:
+
+```env
+# 沙箱配置
+SANDBOX_IMAGE=pm-sandbox:latest
+SANDBOX_MEMORY_MB=2048
+SANDBOX_IDLE_TIMEOUT_MINUTES=30
+```
+
+#### 构建沙箱镜像
+
+```bash
+cd server/docker
+docker build -t pm-sandbox:latest -f Dockerfile.sandbox .
+```
+
+---
+
+## 🏗️ 技术架构
+
+### 系统架构图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        浏览器 (前端)                         │
+│  ┌─────────────┬──────────────────┬─────────────┐           │
+│  │   文件树    │    预览/编辑器    │    终端     │           │
+│  │  (280px)    │    (弹性)        │   (400px)   │           │
+│  └─────────────┴──────────────────┴─────────────┘           │
+└─────────────────────────────────────────────────────────────┘
+         │ HTTP (3001)              │ WebSocket (3002)
+         ▼                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Node.js 后端服务                          │
+│  ┌─────────────┬─────────────┬─────────────┬─────────────┐  │
+│  │  Express   │  WebSocket  │   认证中间件 │  文件监听   │  │
+│  │  Router    │   Server    │   (JWT)     │  (chokidar) │  │
+│  └─────────────┴─────────────┴─────────────┴─────────────┘  │
+│  ┌─────────────┬─────────────┬─────────────┬─────────────┐  │
+│  │  用户管理   │  项目管理   │  文件操作   │  沙箱管理   │  │
+│  │  (Prisma)  │  (SQLite)   │  (multer)  │  (Docker)   │  │
+│  └─────────────┴─────────────┴─────────────┴─────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+         │                          │
+         ▼                          ▼
+┌─────────────────┐      ┌─────────────────┐
+│   SQLite DB     │      │  Docker 沙箱    │
+│  (用户/项目数据) │      │  (终端隔离)     │
+└─────────────────┘      └─────────────────┘
+```
+
+### 技术栈
+
+| 层级 | 技术 | 版本 |
+|------|------|------|
+| **前端框架** | React | 19.x |
+| **构建工具** | Vite | 8.x |
+| **语言** | TypeScript | 6.x |
+| **路由** | React Router | 7.x |
+| **HTTP 客户端** | Axios | 1.x |
+| **终端** | xterm.js | 6.x |
+| **拖拽库** | interactjs | 1.x |
+| **Markdown** | react-markdown | 10.x |
+| **后端框架** | Express | 4.x |
+| **WebSocket** | ws | 8.x |
+| **ORM** | Prisma | 7.x |
+| **数据库** | SQLite (better-sqlite3) | - |
+| **认证** | JWT (jsonwebtoken) | 9.x |
+| **密码** | bcryptjs | 3.x |
+| **文件监听** | chokidar | 3.x |
+| **文件上传** | multer | 2.x |
+| **容器** | dockerode | 4.x |
+| **终端 PTY** | node-pty | 1.x |
+
+### 项目结构
+
+```
+productManager/
+├── server/                     # Node.js 后端服务
+│   ├── src/
+│   │   ├── db/                # 数据库 (Prisma)
+│   │   ├── middleware/        # 认证中间件
+│   │   ├── routes/            # API 路由
+│   │   │   ├── auth.ts        # 认证接口
+│   │   │   ├── users.ts       # 用户管理
+│   │   │   └── files.ts       # 文件操作
+│   │   └── utils/             # 工具函数
+│   │       ├── sandbox.ts     # 沙箱管理
+│   │       ├── jwt.ts         # JWT 工具
+│   │       └── userProjects.ts # 用户项目目录
+│   ├── docker/                # Docker 配置
+│   │   └── Dockerfile.sandbox # 沙箱镜像
+│   ├── prisma/                # Prisma Schema
+│   ├── index.ts               # 服务器入口
+│   └── package.json
+│
+├── web/                        # React 前端应用
+│   ├── src/
+│   │   ├── api/               # API 客户端
+│   │   │   └── client.ts      # Axios 封装
+│   │   ├── components/        # React 组件
+│   │   │   ├── FileTree.tsx   # 文件树
+│   │   │   ├── RenderFrame.tsx # 渲染区
+│   │   │   ├── Terminal.tsx   # 终端
+│   │   │   ├── UISelector.tsx # UI 选择器
+│   │   │   ├── CodeEditor.tsx # 代码编辑器
+│   │   │   ├── ImageViewer.tsx # 图片查看器
+│   │   │   ├── VideoPlayer.tsx # 视频播放器
+│   │   │   └── MarkdownViewer.tsx # Markdown 预览
+│   │   ├── pages/             # 页面组件
+│   │   │   ├── LoginPage.tsx  # 登录页
+│   │   │   ├── RegisterPage.tsx # 注册页
+│   │   │   └── ProfilePage.tsx # 个人主页
+│   │   ├── utils/             # 工具函数
+│   │   │   └── exportHelper.ts # ZIP 导出工具
+│   │   ├── App.tsx            # 主应用
+│   │   └── main.tsx           # 入口
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── axure/                      # 项目文件存储 (用户数据)
+├── deploy-windows.ps1          # Windows 部署脚本
+├── deploy.sh                   # Linux/Mac 部署脚本
+├── DEPLOYMENT.md               # 部署文档
+├── QUICKSTART.md               # 快速开始
+└── package.json                # 根项目配置
+```
+
+---
 
 ## 🔌 API 接口
 
-### HTTP API (端口 3001)
+### 认证接口
 
-- `GET /api/files` - 获取文件列表
-- `GET /api/file?path=xxx` - 读取文件内容
-- `POST /api/file` - 保存文件
+| 方法 | 端点 | 描述 | 认证 |
+|------|------|------|------|
+| POST | `/api/auth/register` | 用户注册 | ❌ |
+| POST | `/api/auth/login` | 用户登录 | ❌ |
+| POST | `/api/auth/logout` | 用户登出 | ✅ |
+| POST | `/api/auth/refresh-token` | 刷新 Token | ❌ |
+| GET | `/api/auth/me` | 获取当前用户 | ✅ |
+| POST | `/api/auth/change-password` | 修改密码 | ✅ |
+| POST | `/api/auth/reset-password/:userId` | 重置密码 (Admin) | ✅ |
 
-### WebSocket (端口 3002)
+### 用户管理接口 (Admin)
 
-用于热更新推送：
+| 方法 | 端点 | 描述 |
+|------|------|------|
+| GET | `/api/users` | 获取用户列表 |
+| GET | `/api/users/:id` | 获取用户详情 |
+| PUT | `/api/users/:id` | 更新用户信息 |
+| DELETE | `/api/users/:id` | 删除用户 |
+
+### 项目接口
+
+| 方法 | 端点 | 描述 |
+|------|------|------|
+| GET | `/api/projects` | 获取项目列表 |
+| POST | `/api/projects` | 创建项目 |
+| DELETE | `/api/projects/:name` | 删除项目 |
+
+### 文件接口
+
+| 方法 | 端点 | 描述 |
+|------|------|------|
+| GET | `/api/files` | 获取文件树 |
+| GET | `/api/file` | 读取文件内容 |
+| POST | `/api/file` | 保存文件 |
+| GET | `/api/file/blob` | 读取文件 Blob (图片/视频) |
+| POST | `/api/folder` | 创建文件夹 |
+| POST | `/api/create-file` | 创建文件 |
+| DELETE | `/api/item` | 删除文件/文件夹 |
+| POST | `/api/rename` | 重命名 |
+| POST | `/api/upload` | 上传文件 |
+| POST | `/api/files/batch` | 批量获取资源 |
+
+### WebSocket 接口
+
+**连接地址**: `ws://localhost:3002?token=<JWT_TOKEN>&session=<SESSION_ID>`
+
+**消息格式**:
 
 ```json
+// 终端消息
+{
+  "type": "terminal-data",
+  "session": "session-123",
+  "data": "命令输出..."
+}
+
+// 文件变更通知
 {
   "type": "file-change",
-  "path": "page_1.html",
+  "path": "project-1/index.html",
   "timestamp": 1234567890
 }
 ```
 
-## 🎨 界面布局
+---
 
-```
-┌─────────────┬──────────────────┬─────────────┐
-│             │                  │             │
-│  文件树     │   预览区         │   终端      │
-│  (280px)    │   (弹性)         │   (400px)   │
-│             │                  │             │
-│  📁 axure/  │  👁️ HTML 渲染    │  💻 CLI     │
-│  - page_1   │  🎯 UI 选择器     │  任意命令  │
-│  - index    │  ✋ 拖拽缩放     │             │
-│             │                  │             │
-└─────────────┴──────────────────┴─────────────┘
-```
+## 🏖️ 部署指南
 
-## 📝 UI Intent 输出
+### Docker 沙箱部署
 
-当使用 UI 选择器调整元素时，会生成如下 Intent：
+详细部署步骤请参考 [DEPLOYMENT.md](./DEPLOYMENT.md)
 
-```typescript
-{
-  action: 'move',           // 或 'resize'
-  componentId: 'button.cta',
-  deltaX: 20,               // X 轴移动距离
-  deltaY: -10,              // Y 轴移动距离
-  before: { x: 100, y: 200, width: 120, height: 40 },
-  after: { x: 120, y: 190, width: 120, height: 40 }
-}
+#### Windows 快速部署
+
+```powershell
+# 以管理员身份运行 PowerShell
+cd F:\js-vue-project\productManager
+.\deploy-windows.ps1
 ```
 
-可以在 `App.tsx` 的 `handleIntent` 函数中处理这些 Intent，例如：
-- 发送到 AI 生成修改建议
-- 记录操作历史
-- 生成代码补丁
+#### Linux/Mac 快速部署
 
-## 🔧 开发命令
+```bash
+cd /path/to/productManager
+chmod +x deploy.sh
+./deploy.sh
+```
+
+### 生产环境配置
+
+1. **构建项目**
+```bash
+cd server && npm run build
+cd ../web && npm run build
+```
+
+2. **配置环境变量**
+```bash
+cd server
+cp .env.production .env
+# 编辑 .env 修改 JWT 密钥等配置
+```
+
+3. **启动服务**
+```bash
+cd server
+node dist/index.js
+```
+
+### 端口说明
+
+| 端口 | 用途 |
+|------|------|
+| 3000 | 前端开发服务器 |
+| 3001 | 后端 HTTP API |
+| 3002 | 后端 WebSocket |
+| 5173 | 生产环境前端 (Vite 默认) |
+
+---
+
+## 🛠️ 开发指南
+
+### 开发命令
 
 ```bash
 # 开发
@@ -193,23 +550,110 @@ npm run build:server # 仅后端
 npm start            # 启动后端服务
 ```
 
-## 📋 端口说明
+### 数据库迁移
 
-| 端口 | 用途 |
-|------|------|
-| 3000 | 前端开发服务器 |
-| 3001 | 后端 HTTP API |
-| 3002 | 后端 WebSocket（热更新） |
+```bash
+cd server
 
-## 🚧 后续规划
+# 生成 Prisma 客户端
+npx prisma generate
 
-- [ ] 资源管理面板（图片、CSS、JS）
-- [ ] 多页面跳转配置
-- [ ] 对话历史管理
-- [ ] AI Intent 自动生成提示
-- [ ] 代码差异预览
-- [ ] 撤销/重做功能
+# 同步数据库结构
+npx prisma db push
+
+# 创建新迁移
+npx prisma migrate dev --name init
+
+# 应用迁移
+npx prisma migrate deploy
+```
+
+### 添加新功能
+
+1. **后端 API**
+   - 在 `server/src/routes/` 创建新路由
+   - 在 `server/index.ts` 注册路由
+   - 添加认证中间件 (如需要)
+
+2. **前端组件**
+   - 在 `web/src/components/` 创建新组件
+   - 在页面中引用组件
+   - 更新 API 客户端 (如需要)
+
+3. **数据库变更**
+   - 修改 `server/prisma/schema.prisma`
+   - 运行 `npx prisma db push`
+
+---
+
+## ❓ 常见问题
+
+### Q: 终端无法连接怎么办？
+
+**A**: 检查以下几点：
+1. Docker Desktop 是否已启动
+2. 沙箱镜像是否已构建：`docker images | grep pm-sandbox`
+3. 查看服务器日志是否有错误信息
+
+### Q: 文件热更新不生效？
+
+**A**: 
+1. 确认 WebSocket 连接正常 (端口 3002)
+2. 检查文件是否在监听范围内 (排除 node_modules)
+3. 尝试手动刷新页面
+
+### Q: 如何修改默认端口？
+
+**A**: 编辑 `server/.env`:
+```env
+PORT=3001      # HTTP API 端口
+WS_PORT=3002   # WebSocket 端口
+```
+
+前端端口在 `web/vite.config.ts` 中修改。
+
+### Q: 用户数据存储在何处？
+
+**A**: 
+- **数据库**: `server/prisma/dev.db` (SQLite)
+- **项目文件**: `axure/users/<USER_ID>/projects/`
+
+### Q: 如何备份用户数据？
+
+**A**: 备份以下目录：
+```bash
+# 数据库
+cp server/prisma/dev.db backup.db
+
+# 项目文件
+cp -r axure/users/ backup/users/
+```
+
+---
 
 ## 📄 License
 
-MIT
+本项目采用 **GNU General Public License v3.0** 开源许可证。
+
+- ✅ 允许商业使用
+- ✅ 允许修改和分发
+- ⚠️ **传染性要求**：任何衍生作品必须同样采用 GPL v3 开源
+- 📄 完整许可证文件见 [LICENSE](./LICENSE)
+
+---
+
+## 🙏 致谢
+
+本项目使用了以下优秀开源项目：
+
+- [React](https://react.dev/) - 前端框架
+- [Vite](https://vitejs.dev/) - 构建工具
+- [Express](https://expressjs.com/) - 后端框架
+- [Prisma](https://www.prisma.io/) - ORM
+- [xterm.js](https://xtermjs.org/) - 终端组件
+- [interactjs](https://interactjs.io/) - 拖拽库
+- [Docker](https://www.docker.com/) - 容器化
+
+---
+
+**🎉 开始你的 AI 驱动产品设计之旅吧！**

@@ -13,7 +13,7 @@
     "start": "cd server && npm start"
   },
   "keywords": ["ai", "product-manager", "prototype"],
-  "license": "MIT",
+  "license": "GPL-3.0",
   "devDependencies": {
     "concurrently": "^8.2.2"
   }
