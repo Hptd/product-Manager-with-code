@@ -6,12 +6,12 @@ import { dirname } from 'path';
 // 获取当前文件所在目录（server/src/utils）
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// PROJECT_ROOT 是 server 目录的父目录（项目根目录）
-// __dirname -> server/src/utils
-// .. -> server/src
-// ../.. -> server
-// ../../.. -> 项目根目录
-const PROJECT_ROOT = path.join(__dirname, '..', '..', '..');
+
+// PROJECT_ROOT 是项目根目录
+// 在 Windows 上 path.join 往上跳目录有问题，使用字符串替换
+// __dirname 格式：E:\productManager\server\src\utils 或 E:\productManager\server\dist\src\utils
+// 我们需要：E:\productManager
+const PROJECT_ROOT = __dirname.replace(/\\?(server\\src\\utils|server\\dist\\src\\utils)$/, '').replace(/\/?(server\/src\/utils|server\/dist\/src\/utils)$/, '');
 
 // 获取用户项目根目录
 export function getUserProjectsDir(userId: string): string {

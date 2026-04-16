@@ -6,41 +6,45 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # 安装完整的开发环境
 RUN apt-get update && apt-get install -y \
-    # Shell 和编辑器
     bash vim nano sudo \
-    # 网络工具
     curl wget git \
-    # Node.js 开发环境
-    nodejs npm \
-    # Python 开发环境
     python3 python3-pip python3-venv \
-    # 常用工具
     zip unzip jq tree htop \
-    # 文件操作
     file less man-db \
-    # 清理缓存减小镜像体积
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && npm cache clean --force
+    && apt-get clean
+
+# 安装最新版 Node.js (使用 NodeSource)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# 安装 Qwen Code CLI (使用官方安装脚本)
+# 设置环境变量使安装脚本在 Docker 中正常工作
+ENV SHELL=/bin/bash
+ENV HOME=/root
+RUN curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen.sh -o /tmp/install-qwen.sh && \
+    chmod +x /tmp/install-qwen.sh && \
+    bash /tmp/install-qwen.sh -s qwenchat && \
+    rm /tmp/install-qwen.sh && \
+    # 确保 qwen 在全局 PATH 中
+    ln -sf /root/.qwen-code/bin/qwen /usr/local/bin/qwen 2>/dev/null || true && \
+    npm cache clean --force
 
 # 设置工作目录
 WORKDIR /workspace
 
-# 自定义 Bash 提示符和欢迎信息
-RUN echo '# 欢迎信息' > /root/.bashrc && \
-    echo 'echo "========================================"' >> /root/.bashrc && \
-    echo 'echo "  🖥️  欢迎使用开发环境"' >> /root/.bashrc && \
-    echo 'echo "  项目目录: /workspace"' >> /root/.bashrc && \
-    echo 'echo "  这是一个独立的沙箱环境"' >> /root/.bashrc && \
-    echo 'echo "========================================"' >> /root/.bashrc && \
-    echo 'echo ""' >> /root/.bashrc && \
-    echo '# 自定义提示符' >> /root/.bashrc && \
-    echo 'export PS1="🔧 [\u@\h \W]\\$ "' >> /root/.bashrc && \
+# 创建 bashrc 配置文件
+COPY bashrc.template /root/.bashrc.template
+RUN cat /root/.bashrc.template > /root/.bashrc && \
+    # 添加 qwen 路径
+    echo 'export PATH="$HOME/.qwen-code/bin:$PATH"' >> /root/.bashrc && \
     echo 'export TERM=xterm-256color' >> /root/.bashrc
 
 # 设置基础环境变量
 ENV HOME=/root
-ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
+ENV PATH="/root/.npm-global/bin:/root/.qwen-code/bin:/usr/local/bin:/usr/bin:${PATH}"
 ENV NODE_ENV=production
 ENV LANG=C.UTF-8
 

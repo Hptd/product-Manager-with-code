@@ -83,7 +83,10 @@ export function Terminal({ cwd, projectName }: TerminalProps) {
     }
 
     // 连接 WebSocket 到后端 PTY - 添加 token 认证
-    const wsUrl = `ws://localhost:8002?terminal=true&session=${sessionId.current}&project=${encodeURIComponent(projectName || '')}&token=${token || ''}`;
+    // 使用当前窗口的主机地址作为 WebSocket 地址
+    const wsHost = window.location.hostname || 'localhost';
+    const wsPort = import.meta.env.VITE_WS_PORT || '8002';
+    const wsUrl = `ws://${wsHost}:${wsPort}?terminal=true&session=${sessionId.current}&project=${encodeURIComponent(projectName || '')}&token=${token || ''}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

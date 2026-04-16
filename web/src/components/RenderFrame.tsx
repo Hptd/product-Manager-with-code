@@ -319,7 +319,12 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
 
   // 处理热更新消息
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8002');
+    // 使用当前窗口的主机地址作为 WebSocket 地址
+    const wsHost = window.location.hostname || 'localhost';
+    const wsPort = import.meta.env.VITE_WS_PORT || '8002';
+    const wsUrl = `ws://${wsHost}:${wsPort}`;
+    
+    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log('🔌 热更新 WebSocket 已连接');
