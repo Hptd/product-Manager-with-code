@@ -1,0 +1,13 @@
+# 欢迎信息
+echo "========================================"
+echo "  🖥️  欢迎使用开发环境"
+echo "  项目目录：/workspace"
+echo "  Node.js: $(node --version)"
+echo "  Qwen Code: $(qwen --version 2>/dev/null || echo '已预装')"
+echo "  使用方法：qwen [命令]"
+echo "  这是一个独立的沙箱环境"
+echo "========================================"
+echo ""
+
+# 自定义提示符
+export PS1="🔧 [\u@\h \W]\$ "

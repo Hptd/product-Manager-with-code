@@ -1,5 +1,6 @@
 import Docker from 'dockerode';
 import fs from 'fs';
+import path from 'path';
 
 // Docker 客户端单例
 let docker: Docker | null = null;
@@ -20,10 +21,50 @@ export interface SandboxSession {
   sessionId: string;
   createdAt: Date;
   lastActiveAt: Date;
+  volumeName?: string; // 用户持久化卷名称
 }
 
 // 存储活跃的沙箱会话
 const sandboxSessions = new Map<string, SandboxSession>();
+
+// 用户持久化卷缓存 (userId -> volumeName)
+const userVolumes = new Map<string, string>();
+
+/**
+ * 为用户创建或获取持久化卷
+ */
+async function getOrCreateUserVolume(userId: string): Promise<string> {
+  // 检查缓存
+  const cachedVolume = userVolumes.get(userId);
+  if (cachedVolume) {
+    return cachedVolume;
+  }
+
+  const docker = getDocker();
+  const volumeName = `pm-user-${userId}`;
+
+  try {
+    // 检查卷是否已存在
+    const volume = docker.getVolume(volumeName);
+    await volume.inspect();
+    console.log(`📦 使用现有用户卷：${volumeName}`);
+    userVolumes.set(userId, volumeName);
+    return volumeName;
+  } catch (error) {
+    // 卷不存在，创建新卷
+    console.log(`📦 创建用户持久化卷：${volumeName}`);
+    await docker.createVolume({
+      Name: volumeName,
+      Labels: {
+        'managed-by': 'product-manager',
+        'user-id': userId,
+        'purpose': 'user-home'
+      }
+    });
+    userVolumes.set(userId, volumeName);
+    return volumeName;
+  }
+}
 
 /**
  * 为用户创建沙箱容器
@@ -34,11 +75,14 @@ export async function createSandbox(
   project: string,
   cwd: string
 ): Promise<{ container: Docker.Container; stream: NodeJS.ReadWriteStream }> {
-  
+
   // 确保本地项目目录存在
   if (!fs.existsSync(cwd)) {
     fs.mkdirSync(cwd, { recursive: true });
   }
+
+  // 获取用户持久化卷
+  const userVolumeName = await getOrCreateUserVolume(userId);
 
   // 获取用户自定义环境变量
   const userEnvVars = await getUserEnvVars(userId);
@@ -49,7 +93,7 @@ export async function createSandbox(
   // 将 Windows 路径转换为 Docker 可识别的格式
   const dockerPath = convertToDockerPath(cwd);
 
-  console.log(`📦 创建沙箱: user=${userId}, project=${project}, cwd=${dockerPath}`);
+  console.log(`📦 创建沙箱：user=${userId}, project=${project}, cwd=${dockerPath}, volume=${userVolumeName}`);
 
   try {
     // 创建容器
@@ -61,26 +105,27 @@ export async function createSandbox(
       AttachStdin: true,
       AttachStdout: true,
       AttachStderr: true,
-      
+
       // 资源限制
       HostConfig: {
         Memory: parseMemoryLimit(process.env.SANDBOX_MEMORY_MB || '2048'),
         MemorySwap: parseMemoryLimit(process.env.SANDBOX_MEMORY_MB || '2048'),
         NanoCpus: 1 * 10 ** 9,  // 1 CPU 核心
         PidsLimit: 200,
-        
-        // 挂载用户项目目录
+
+        // 挂载用户项目目录和持久化卷
         Binds: [
-          `${dockerPath}:/workspace:rw`
+          `${dockerPath}:/workspace:rw`,
+          `${userVolumeName}:/root:rw`  // 挂载用户主目录，保存配置和下载
         ],
-        
+
         // 安全限制
         CapDrop: ['ALL'],
         SecurityOpt: ['no-new-privileges'],
         NetworkMode: 'bridge',
         AutoRemove: true,
       },
-      
+
       // 环境变量
       Env: [
         `USER_ID=${userId}`,
@@ -91,7 +136,7 @@ export async function createSandbox(
         // 注入用户自定义环境变量
         ...Object.entries(userEnvVars).map(([k, v]) => `${k}=${v}`),
       ],
-      
+
       // 标签
       Labels: {
         'managed-by': 'product-manager',
@@ -131,11 +176,12 @@ export async function createSandbox(
       sessionId,
       createdAt: new Date(),
       lastActiveAt: new Date(),
+      volumeName: userVolumeName,
     };
 
     sandboxSessions.set(sessionId, session);
 
-    console.log(`✅ 沙箱已创建: session=${sessionId}`);
+    console.log(`✅ 沙箱已创建：session=${sessionId}`);
 
     return { container, stream };
 
@@ -184,12 +230,12 @@ export async function destroySandbox(sessionId: string): Promise<void> {
     try {
       await session.container.stop({ t: 5 });
     } catch (error) {
-      // 如果停止失败,强制 kill
+      // 如果停止失败，强制 kill
       await session.container.kill();
     }
 
     sandboxSessions.delete(sessionId);
-    console.log(`🗑️  沙箱已销毁: session=${sessionId}`);
+    console.log(`🗑️  沙箱已销毁：session=${sessionId} (volume ${session.volumeName} 保留)`);
   } catch (error) {
     console.error('销毁沙箱失败:', error);
     // 即使失败也要从会话列表中删除
@@ -204,7 +250,7 @@ export async function cleanupIdleSandboxes(idleTimeoutMinutes?: number): Promise
   const timeout = idleTimeoutMinutes || parseInt(process.env.SANDBOX_IDLE_TIMEOUT_MINUTES || '30');
   const now = new Date();
   let cleanedCount = 0;
-  
+
   const sessionsToRemove: string[] = [];
 
   for (const [sessionId, session] of sandboxSessions.entries()) {
@@ -218,7 +264,7 @@ export async function cleanupIdleSandboxes(idleTimeoutMinutes?: number): Promise
 
   // 清理空闲会话
   for (const sessionId of sessionsToRemove) {
-    console.log(`⏰ 清理空闲沙箱: ${sessionId}`);
+    console.log(`⏰ 清理空闲沙箱：${sessionId}`);
     await destroySandbox(sessionId);
     cleanedCount++;
   }
@@ -249,8 +295,8 @@ export function getAllSandboxSessions(): Map<string, SandboxSession> {
  * TODO: 后续实现数据库读取和解密
  */
 async function getUserEnvVars(userId: string): Promise<Record<string, string>> {
-  // 暂时返回空,后续从数据库读取
-  // 格式: { OPENAI_API_KEY: 'sk-xxx', QWEN_API_KEY: 'dashscope-xxx' }
+  // 暂时返回空，后续从数据库读取
+  // 格式：{ OPENAI_API_KEY: 'sk-xxx', QWEN_API_KEY: 'dashscope-xxx' }
   return {};
 }
 
@@ -260,7 +306,7 @@ async function getUserEnvVars(userId: string): Promise<Record<string, string>> {
  * Docker: /f/js-vue-project/productManager/axure/users/xxx/projects
  */
 function convertToDockerPath(windowsPath: string): string {
-  // 如果已经是 Unix 路径,直接返回
+  // 如果已经是 Unix 路径，直接返回
   if (!windowsPath.includes(':\\')) {
     return windowsPath;
   }
@@ -269,7 +315,7 @@ function convertToDockerPath(windowsPath: string): string {
   const [drive, ...pathParts] = windowsPath.split('\\');
   const driveLetter = drive.charAt(0).toLowerCase();
   const unixPath = '/' + driveLetter + '/' + pathParts.join('/');
-  
+
   return unixPath;
 }
 
