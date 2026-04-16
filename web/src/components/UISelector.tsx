@@ -282,9 +282,12 @@ export function UISelectorOverlay({
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!enabled || !iframeRef.current || mode !== 'select') return;
 
+    // 🚫 阻止事件传播，避免触发页面的 hover 效果
+    event.stopImmediatePropagation(); // 阻止同阶段的其他监听器
+
     const iframe = iframeRef.current;
     const iframeDoc = iframe.contentDocument;
-    
+
     if (!iframeDoc) {
       setHoverElement(null);
       setHoverInfo(null);
@@ -335,9 +338,13 @@ export function UISelectorOverlay({
   const handleClick = useCallback((event: MouseEvent) => {
     if (!enabled || !iframeRef.current) return;
 
+    // 🚫 强力阻止事件传播和默认行为，避免触发页面组件的点击事件
+    event.preventDefault();
+    event.stopImmediatePropagation(); // 比 stopPropagation 更强力，阻止同阶段的其他监听器
+
     const iframe = iframeRef.current;
     const iframeDoc = iframe.contentDocument;
-    
+
     if (!iframeDoc) return;
 
     // 使用 iframe 内部的坐标系统
@@ -526,6 +533,9 @@ export function UISelectorOverlay({
       document.body.appendChild(overlayContainer);
     }
 
+    // ✅ 移除拦截层 - 使用 iframe 内部 capture 阶段的事件监听来阻止传播
+    // 这样 mousemove 可以正常触发悬浮效果，而 click 会被拦截
+
     if (highlightRect && (elementInfo || hoverInfo)) {
       overlayContainer.innerHTML = '';
       const highlight = document.createElement('div');
@@ -616,7 +626,7 @@ export function UISelectorOverlay({
         overlayContainer.innerHTML = '';
       }
     };
-  }, [highlightRect, elementInfo, hoverInfo, mode, isHovering]);
+  }, [highlightRect, elementInfo, hoverInfo, mode, isHovering, enabled, iframeRef]);
 
   return null;
 }
