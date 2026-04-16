@@ -1,6 +1,6 @@
 # AI Product Manager
 
-**AI 驱动的产品原型管理系统** — 将 Axure 原型与 AI CLI 工具无缝集成，实现实时预览、智能编辑和沙箱隔离的终端体验。
+**AI 驱动的产品原型管理系统** — 将原型预览、AI CLI 工具与 Docker 沙箱终端无缝集成，实现实时预览、智能编辑和完全隔离的终端体验。
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
@@ -30,8 +30,8 @@
 | **👁️ 实时预览** | iframe 渲染 HTML/CSS/JS，支持热更新自动刷新 |
 | **🎨 UI 选择器** | 点击选择页面元素，查看完整 DOM 信息与样式 |
 | **✋ 拖拽/缩放** | 直接拖动元素调整位置，拖拽边角调整尺寸 |
-| **💻 沙箱终端** | Docker 隔离的终端环境，支持任意 AI CLI 工具 |
-| **🔐 用户系统** | 完整的注册/登录、JWT 认证、权限管理 |
+| **💻 Docker 沙箱终端** | 每个会话都是独立的 Docker 容器，支持任意 AI CLI 工具 |
+| **🔐 用户系统** | 完整的注册/登录、JWT 认证、权限管理、强制改密码 |
 
 ### 🛠️ 文件管理
 
@@ -58,9 +58,9 @@
 - 位置坐标、尺寸
 - 完整属性列表
 - 计算样式
-- 无障碍属性
+- 无障碍属性 (ARIA)
 
-### 💻 沙箱终端
+### 💻 Docker 沙箱终端
 
 每个终端会话都是独立的 Docker 容器：
 
@@ -70,6 +70,7 @@
 │  ├─ 独立文件系统 (挂载用户项目目录)       │
 │  ├─ 独立环境变量 (用户自定义配置)         │
 │  ├─ 资源限制 (2GB 内存 + 1 CPU 核心)      │
+│  ├─ 安全隔离 (CapDrop ALL, no-new-privs)│
 │  └─ 自动清理 (30 分钟无活动自动销毁)      │
 └─────────────────────────────────────────┘
 ```
@@ -81,6 +82,15 @@ cursor "给按钮添加 hover 效果"
 claude "优化页面布局"
 aider "重构这个组件"
 ```
+
+### 🔐 安全特性
+
+- **JWT 认证**: Access Token + Refresh Token 双令牌机制
+- **自动刷新**: Token 过期自动刷新，无感知切换
+- **权限控制**: USER / ADMIN 角色分离
+- **安全审计**: 操作日志记录
+- **防暴力破解**: 登录失败次数限制
+- **强制改密**: 管理员可强制用户重置密码
 
 ---
 
@@ -193,8 +203,9 @@ cd web && npm run dev
 #### 启用方式
 ```
 1. 选择 HTML 文件进入预览模式
-2. 点击右上角 "🎯 UI 选择器" 开关
-3. 选择操作模式（选择/移动/缩放/描述）
+2. 点击左侧面板 "🎯" 选项卡
+3. 在渲染区右上角开启 "UI 选择器" 开关
+4. 选择操作模式（选择/移动/缩放/描述）
 ```
 
 #### 操作流程
@@ -204,6 +215,7 @@ cd web && npm run dev
 1. 鼠标悬停 → 元素高亮 + 信息提示框
 2. 点击元素 → 固定高亮 + 详情面板更新
 3. 查看元素完整信息
+4. 可复制标准格式 (JSON/Markdown/纯文本)
 ```
 
 **移动模式**:
@@ -255,7 +267,7 @@ cd web && npm run dev
 }
 ```
 
-### 4. 沙箱终端
+### 4. Docker 沙箱终端
 
 #### 工作原理
 
@@ -265,14 +277,15 @@ cd web && npm run dev
 创建 Docker 容器
     ├─ 镜像：pm-sandbox:latest
     ├─ 挂载：用户项目目录 → /workspace
-    ├─ 环境变量：USER_ID, PROJECT_NAME
-    └─ 资源限制：2GB 内存，1 CPU 核心
+    ├─ 挂载：用户持久化卷 → /root
+    ├─ 环境变量：USER_ID, PROJECT_NAME, 用户自定义变量
+    └─ 资源限制：2GB 内存，1 CPU 核心，200 进程
     ↓
-返回终端流到前端
+返回终端流到前端 (PowerShell 风格)
     ↓
 用户执行命令 (AI CLI 等)
     ↓
-关闭终端/超时 → 销毁容器
+关闭终端/超时 → 销毁容器 (用户卷保留)
 ```
 
 #### 配置环境变量
@@ -293,6 +306,25 @@ cd server/docker
 docker build -t pm-sandbox:latest -f Dockerfile.sandbox .
 ```
 
+### 5. 导出功能
+
+#### 导出 HTML 及资源
+
+```
+1. 选择 HTML 文件进入预览模式
+2. 点击右上角 "📦 导出" 按钮
+3. 系统自动提取所有资源路径
+4. 批量获取资源文件
+5. 打包为 ZIP 下载
+```
+
+**支持导出的资源**:
+- CSS 样式表
+- JavaScript 脚本
+- 图片文件 (PNG, JPG, GIF, SVG, WebP)
+- 字体文件
+- 其他 HTML 依赖
+
 ---
 
 ## 🏗️ 技术架构
@@ -306,9 +338,9 @@ docker build -t pm-sandbox:latest -f Dockerfile.sandbox .
 │  │   文件树    │    预览/编辑器    │    终端     │           │
 │  │  (280px)    │    (弹性)        │   (400px)   │           │
 │  └─────────────┴──────────────────┴─────────────┘           │
-└─────────────────────────────────────────────────────────────┘
-         │ HTTP (3001)              │ WebSocket (3002)
-         ▼                          ▼
+│         │ HTTP (3001)              │ WebSocket (3002)        │
+└─────────┼──────────────────────────┼─────────────────────────┘
+          ▼                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Node.js 后端服务                          │
 │  ┌─────────────┬─────────────┬─────────────┬─────────────┐  │
@@ -325,6 +357,10 @@ docker build -t pm-sandbox:latest -f Dockerfile.sandbox .
 ┌─────────────────┐      ┌─────────────────┐
 │   SQLite DB     │      │  Docker 沙箱    │
 │  (用户/项目数据) │      │  (终端隔离)     │
+│  - User         │      │  - 独立容器     │
+│  - Project      │      │  - 用户持久化卷 │
+│  - RefreshToken │      │  - 资源限制     │
+│  - AuditLog     │      │  - 自动清理     │
 └─────────────────┘      └─────────────────┘
 ```
 
@@ -350,6 +386,8 @@ docker build -t pm-sandbox:latest -f Dockerfile.sandbox .
 | **文件上传** | multer | 2.x |
 | **容器** | dockerode | 4.x |
 | **终端 PTY** | node-pty | 1.x |
+| **限流** | express-rate-limit | 8.x |
+| **ZIP 导出** | jszip | 3.x |
 
 ### 项目结构
 
@@ -359,6 +397,7 @@ productManager/
 │   ├── src/
 │   │   ├── db/                # 数据库 (Prisma)
 │   │   ├── middleware/        # 认证中间件
+│   │   │   └── auth.ts        # JWT 验证
 │   │   ├── routes/            # API 路由
 │   │   │   ├── auth.ts        # 认证接口
 │   │   │   ├── users.ts       # 用户管理
@@ -366,42 +405,54 @@ productManager/
 │   │   └── utils/             # 工具函数
 │   │       ├── sandbox.ts     # 沙箱管理
 │   │       ├── jwt.ts         # JWT 工具
-│   │       └── userProjects.ts # 用户项目目录
+│   │       ├── userProjects.ts # 用户项目目录
+│   │       └── initAdmin.js   # 管理员初始化
 │   ├── docker/                # Docker 配置
 │   │   └── Dockerfile.sandbox # 沙箱镜像
 │   ├── prisma/                # Prisma Schema
+│   │   └── schema.prisma      # 数据模型
 │   ├── index.ts               # 服务器入口
 │   └── package.json
 │
 ├── web/                        # React 前端应用
 │   ├── src/
 │   │   ├── api/               # API 客户端
-│   │   │   └── client.ts      # Axios 封装
+│   │   │   └── client.ts      # Axios 封装 + Token 管理
 │   │   ├── components/        # React 组件
 │   │   │   ├── FileTree.tsx   # 文件树
 │   │   │   ├── RenderFrame.tsx # 渲染区
 │   │   │   ├── Terminal.tsx   # 终端
-│   │   │   ├── UISelector.tsx # UI 选择器
+│   │   │   ├── UISelector.tsx # UI 选择器核心
+│   │   │   ├── UISelectorComponents.tsx # UI 组件
+│   │   │   ├── UISelectorOverlay.tsx # 覆盖层
+│   │   │   ├── UISelectorTooltip.tsx # 提示框
 │   │   │   ├── CodeEditor.tsx # 代码编辑器
 │   │   │   ├── ImageViewer.tsx # 图片查看器
 │   │   │   ├── VideoPlayer.tsx # 视频播放器
-│   │   │   └── MarkdownViewer.tsx # Markdown 预览
+│   │   │   ├── MarkdownViewer.tsx # Markdown 预览
+│   │   │   ├── ProtectedRoute.tsx # 路由守卫
+│   │   │   └── UserHeader.tsx # 用户信息栏
 │   │   ├── pages/             # 页面组件
 │   │   │   ├── LoginPage.tsx  # 登录页
 │   │   │   ├── RegisterPage.tsx # 注册页
-│   │   │   └── ProfilePage.tsx # 个人主页
+│   │   │   ├── ChangePasswordPage.tsx # 改密码
+│   │   │   ├── ProfilePage.tsx # 个人主页
+│   │   │   └── AdminUsersPage.tsx # 用户管理
 │   │   ├── utils/             # 工具函数
 │   │   │   └── exportHelper.ts # ZIP 导出工具
 │   │   ├── App.tsx            # 主应用
+│   │   ├── Router.tsx         # 路由配置
 │   │   └── main.tsx           # 入口
 │   ├── package.json
 │   └── vite.config.ts
 │
-├── axure/                      # 项目文件存储 (用户数据)
+├── axure/                      # 项目文件存储 (用户数据，Git 忽略)
 ├── deploy-windows.ps1          # Windows 部署脚本
 ├── deploy.sh                   # Linux/Mac 部署脚本
 ├── DEPLOYMENT.md               # 部署文档
+├── LICENSE                     # GPL v3 许可证
 ├── QUICKSTART.md               # 快速开始
+├── PROJECT_PLAN.md             # 项目计划
 └── package.json                # 根项目配置
 ```
 
@@ -425,9 +476,9 @@ productManager/
 
 | 方法 | 端点 | 描述 |
 |------|------|------|
-| GET | `/api/users` | 获取用户列表 |
+| GET | `/api/users` | 获取用户列表 (支持分页/搜索) |
 | GET | `/api/users/:id` | 获取用户详情 |
-| PUT | `/api/users/:id` | 更新用户信息 |
+| PUT | `/api/users/:id` | 更新用户信息 (角色/状态) |
 | DELETE | `/api/users/:id` | 删除用户 |
 
 ### 项目接口
@@ -450,7 +501,7 @@ productManager/
 | POST | `/api/create-file` | 创建文件 |
 | DELETE | `/api/item` | 删除文件/文件夹 |
 | POST | `/api/rename` | 重命名 |
-| POST | `/api/upload` | 上传文件 |
+| POST | `/api/upload` | 上传文件 (支持多文件) |
 | POST | `/api/files/batch` | 批量获取资源 |
 
 ### WebSocket 接口
@@ -584,6 +635,52 @@ npx prisma migrate deploy
    - 修改 `server/prisma/schema.prisma`
    - 运行 `npx prisma db push`
 
+### 数据模型
+
+```prisma
+model User {
+  id                  String         @id @default(uuid())
+  username            String         @unique
+  email               String         @unique
+  passwordHash        String
+  role                Role           @default(USER)
+  avatarUrl           String?
+  status              UserStatus     @default(ACTIVE)
+  failedLogins        Int            @default(0)
+  lockedUntil         DateTime?
+  forcePasswordChange Boolean        @default(false)
+  passwordResetBy     String?
+  passwordResetAt     DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  projects            Project[]
+  refreshTokens       RefreshToken[]
+}
+
+model Project {
+  id        String   @id @default(uuid())
+  name      String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+  
+  @@unique([userId, name])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+```
+
 ---
 
 ## ❓ 常见问题
@@ -594,6 +691,7 @@ npx prisma migrate deploy
 1. Docker Desktop 是否已启动
 2. 沙箱镜像是否已构建：`docker images | grep pm-sandbox`
 3. 查看服务器日志是否有错误信息
+4. 确认端口 3002 未被占用
 
 ### Q: 文件热更新不生效？
 
@@ -601,6 +699,7 @@ npx prisma migrate deploy
 1. 确认 WebSocket 连接正常 (端口 3002)
 2. 检查文件是否在监听范围内 (排除 node_modules)
 3. 尝试手动刷新页面
+4. 检查浏览器控制台是否有错误
 
 ### Q: 如何修改默认端口？
 
@@ -617,6 +716,7 @@ WS_PORT=3002   # WebSocket 端口
 **A**: 
 - **数据库**: `server/prisma/dev.db` (SQLite)
 - **项目文件**: `axure/users/<USER_ID>/projects/`
+- **用户持久化卷**: Docker Volume `pm-user-<USER_ID>`
 
 ### Q: 如何备份用户数据？
 
@@ -627,7 +727,28 @@ cp server/prisma/dev.db backup.db
 
 # 项目文件
 cp -r axure/users/ backup/users/
+
+# Docker 用户卷 (可选)
+docker run --rm -v pm-user-xxx:/data -v $(pwd):/backup busybox tar czf /backup/user-xxx.tar.gz /data
 ```
+
+### Q: 沙箱容器太多如何清理？
+
+**A**: 
+```bash
+# 查看活跃沙箱
+docker ps --filter "label=managed-by=product-manager"
+
+# 手动清理所有沙箱
+docker ps --filter "label=managed-by=product-manager" -q | xargs docker rm -f
+
+# 调整空闲超时 (server/.env)
+SANDBOX_IDLE_TIMEOUT_MINUTES=15
+```
+
+### Q: Token 过期如何处理？
+
+**A**: 系统会自动刷新 Token，无需手动处理。如果刷新失败，会自动跳转到登录页。
 
 ---
 
@@ -653,6 +774,10 @@ cp -r axure/users/ backup/users/
 - [xterm.js](https://xtermjs.org/) - 终端组件
 - [interactjs](https://interactjs.io/) - 拖拽库
 - [Docker](https://www.docker.com/) - 容器化
+- [JWT](https://jwt.io/) - 认证
+- [Axios](https://axios-http.com/) - HTTP 客户端
+- [react-markdown](https://react-markdown.js.org/) - Markdown 渲染
+- [jszip](https://stuk.github.io/jszip/) - ZIP 导出
 
 ---
 
