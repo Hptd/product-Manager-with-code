@@ -41,10 +41,11 @@ export function ModeSelector({
   disabled?: boolean;
 }) {
   const modes: { mode: SelectorMode; icon: string; label: string; color: string }[] = [
-    { mode: 'select', icon: '🎯', label: '选择', color: '#2196F3' },
-    { mode: 'move', icon: '✋', label: '移动', color: '#4CAF50' },
-    { mode: 'resize', icon: '📐', label: '缩放', color: '#FF9800' },
-    { mode: 'describe', icon: '📝', label: '描述', color: '#9C27B0' }
+    { mode: 'select', icon: '🎯', label: '选择', color: '#2196F3' }
+    // 暂时隐藏以下功能，因为功能不好用且错误
+    // { mode: 'move', icon: '✋', label: '移动', color: '#4CAF50' },
+    // { mode: 'resize', icon: '📐', label: '缩放', color: '#FF9800' },
+    // { mode: 'describe', icon: '📝', label: '描述', color: '#9C27B0' }
   ];
 
   return (
@@ -366,18 +367,6 @@ export function UISelectorDisplay({
             <div className="mode-hint">
               <span className="mode-dot mode-dot-select"></span>
               <span>选择模式：点击选择元素，获取完整 HTML 信息</span>
-            </div>
-            <div className="mode-hint">
-              <span className="mode-dot mode-dot-move"></span>
-              <span>移动模式：拖拽调整位置</span>
-            </div>
-            <div className="mode-hint">
-              <span className="mode-dot mode-dot-resize"></span>
-              <span>缩放模式：拖拽调整尺寸</span>
-            </div>
-            <div className="mode-hint">
-              <span className="mode-dot mode-dot-describe"></span>
-              <span>描述模式：输入修改要求</span>
             </div>
           </div>
         </div>

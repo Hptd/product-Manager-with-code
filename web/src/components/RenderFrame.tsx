@@ -533,14 +533,14 @@ export function RenderFrame({ filePath, fileContent, projectName = 'project-1', 
               <span>💾 编辑模式</span>
             </label>
           )}
-          {/* UI 选择器模式选择 - 仅 HTML 预览模式显示 */}
+          {/* UI 选择器模式选择 - 暂时隐藏，直接使用选择模式
           {showUISelector && uiSelectorEnabled && (
             <ModeSelector
               currentMode={currentMode}
               onModeChange={setCurrentMode}
               disabled={!uiSelectorEnabled}
             />
-          )}
+          )} */}
           {/* UI 选择器开关 - 仅 HTML 预览模式显示 */}
           {showUISelector && (
             <label className="ui-selector-toggle">
