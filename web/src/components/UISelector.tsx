@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import interact from 'interactjs';
+import {
+  updatePreviewTranslation,
+  resetPreviewForElement,
+  applyEditingStyles,
+  resetEditingStyles,
+  hasPreviewState
+} from '../utils/previewState';
 
 // ==================== 类型定义 ====================
 
@@ -12,36 +18,29 @@ export type Rect = {
 
 export type SelectorMode = 'select' | 'move' | 'resize' | 'describe';
 
-// 增强的元素信息类型
 export type UISelectorInfo = {
-  // 基础信息
   id: string;
   tag: string;
   classList: string[];
   text?: string;
   rect: Rect;
 
-  // 选择器和路径
   selector?: string;
   domPath?: string;
   cssSelector?: string;
 
-  // 无障碍/测试属性
   ariaLabel?: string;
   dataTestId?: string;
 
-  // 完整 HTML 信息
   outerHTML?: string;
   innerHTML?: string;
   attributes?: Record<string, string>;
   styles?: Record<string, string>;
 
-  // 层级信息
   childrenCount?: number;
   parentTag?: string;
 };
 
-// Intent 类型
 export type MoveIntent = {
   type: 'move';
   widget_id: string;
@@ -70,7 +69,6 @@ export type DescribeIntent = {
 
 export type UIIntent = MoveIntent | ResizeIntent | DescribeIntent;
 
-// 悬停元素信息
 export type HoverElementInfo = UISelectorInfo & {
   mouseX: number;
   mouseY: number;
@@ -94,13 +92,8 @@ function isVisibleElement(element: HTMLElement): boolean {
 }
 
 function getElementRect(element: Element, iframe: HTMLIFrameElement): Rect {
-  // 获取元素相对于 iframe 视口的位置
   const elementRect = element.getBoundingClientRect();
-  
-  // 获取 iframe 相对于浏览器视口的位置
   const iframeRect = iframe.getBoundingClientRect();
-  
-  // 计算相对于浏览器视口的位置
   return {
     x: elementRect.left + iframeRect.left,
     y: elementRect.top + iframeRect.top,
@@ -178,7 +171,7 @@ function getElementStyles(element: Element): Record<string, string> {
     'z-index', 'opacity', 'visibility',
     'overflow', 'cursor'
   ];
-  
+
   keyProps.forEach(prop => {
     const value = computed.getPropertyValue(prop);
     if (value && value !== 'none' && value !== 'auto' && value !== 'normal') {
@@ -187,16 +180,6 @@ function getElementStyles(element: Element): Record<string, string> {
   });
 
   return styles;
-}
-
-function isClickInIframe(event: MouseEvent, iframe: HTMLIFrameElement): boolean {
-  const rect = iframe.getBoundingClientRect();
-  return (
-    event.clientX >= rect.left &&
-    event.clientX <= rect.right &&
-    event.clientY >= rect.top &&
-    event.clientY <= rect.bottom
-  );
 }
 
 function getModeColor(mode: SelectorMode): string {
@@ -216,6 +199,31 @@ function getBorderColor(mode: SelectorMode): string {
     case 'resize': return '#FF9800';
     case 'describe': return '#9C27B0';
     default: return '#2196F3';
+  }
+}
+
+// ==================== 拖拽覆盖层工具 ====================
+
+function createDragOverlay(cursorStyle?: string): HTMLDivElement {
+  const overlay = document.createElement('div');
+  overlay.className = 'ui-selector-drag-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100002;
+    cursor: ${cursorStyle || 'inherit'};
+  `;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function removeDragOverlay() {
+  const overlay = document.querySelector('.ui-selector-drag-overlay');
+  if (overlay && overlay.parentNode) {
+    overlay.parentNode.removeChild(overlay);
   }
 }
 
@@ -243,51 +251,86 @@ export function UISelectorOverlay({
   const [highlightRect, setHighlightRect] = useState<Rect | null>(null);
   const [hoverElement, setHoverElement] = useState<Element | null>(null);
   const [hoverInfo, setHoverInfo] = useState<HoverElementInfo | null>(null);
-  const interactInstance = useRef<any>(null);
-  const originalRect = useRef<Rect | null>(null);
   const isHovering = useRef(false);
+
+  // resize frame 引用
+  const resizeFrameRef = useRef<HTMLDivElement | null>(null);
+  // 拖拽状态引用
+  const isDraggingRef = useRef(false);
+
+  // 记录 before rect
+  const beforeRectRef = useRef<Rect | null>(null);
+  const originalRectRef = useRef<Rect | null>(null);
 
   // 构建元素信息
   const buildElementInfo = useCallback((element: Element, iframe: HTMLIFrameElement): UISelectorInfo => {
+    const iframeWindow = iframe.contentWindow;
+    const computed = iframeWindow?.getComputedStyle(element as HTMLElement);
+
     return {
-      // 基础信息
       id: getComponentId(element),
       tag: element.tagName.toLowerCase(),
       classList: Array.from((element as HTMLElement).classList),
       text: element.textContent?.slice(0, 100).trim(),
       rect: getElementRect(element, iframe),
-      
-      // 选择器和路径
+
       selector: element.id ? `#${element.id}` : element.tagName.toLowerCase(),
       domPath: buildDomPath(element),
       cssSelector: buildCssSelector(element),
-      
-      // 无障碍/测试属性
+
       ariaLabel: element.getAttribute('aria-label') || undefined,
       dataTestId: element.getAttribute('data-testid') || undefined,
-      
-      // 完整 HTML 信息
+
       outerHTML: element.outerHTML,
       innerHTML: element.innerHTML,
       attributes: getElementAttributes(element),
-      styles: getElementStyles(element),
-      
-      // 层级信息
+      styles: computed ? (() => {
+        const s: Record<string, string> = {};
+        const keyProps = ['display', 'position', 'width', 'height', 'top', 'right', 'bottom', 'left',
+          'margin', 'padding', 'font-size', 'font-weight', 'color', 'background-color', 'border-radius',
+          'transform', 'box-sizing', 'z-index'];
+        keyProps.forEach(prop => {
+          const value = computed.getPropertyValue(prop);
+          if (value && value !== 'none' && value !== 'auto' && value !== 'normal') {
+            s[prop] = value;
+          }
+        });
+        return s;
+      })() : getElementStyles(element),
+
       childrenCount: element.children.length,
       parentTag: element.parentElement?.tagName.toLowerCase()
     };
   }, []);
 
-  // 处理鼠标移动 - 悬停预览（在 iframe 内部监听）
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-    if (!enabled || !iframeRef.current || mode !== 'select') return;
+  // 清理 resize frame
+  const cleanupResizeFrame = useCallback(() => {
+    if (resizeFrameRef.current && resizeFrameRef.current.parentNode) {
+      resizeFrameRef.current.parentNode.removeChild(resizeFrameRef.current);
+      resizeFrameRef.current = null;
+    }
+  }, []);
 
-    // 🚫 阻止事件传播，避免触发页面的 hover 效果
-    event.stopImmediatePropagation(); // 阻止同阶段的其他监听器
+  // 恢复已选元素的编辑样式
+  const restoreSelectedElement = useCallback((element: Element | null) => {
+    if (element instanceof HTMLElement) {
+      if (hasPreviewState(element)) {
+        resetPreviewForElement(element);
+      }
+      resetEditingStyles(element);
+    }
+  }, []);
+
+  // ==================== 悬停预览 - 所有模式都支持（resize 除外） ====================
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    if (!enabled || !iframeRef.current) return;
+    if (mode === 'resize') return;
+    if (isDraggingRef.current) return;
+
+    event.stopImmediatePropagation();
 
     const iframe = iframeRef.current;
     const iframeDoc = iframe.contentDocument;
-
     if (!iframeDoc) {
       setHoverElement(null);
       setHoverInfo(null);
@@ -296,199 +339,507 @@ export function UISelectorOverlay({
       return;
     }
 
-    // event.clientX/Y 在 iframe 内部是相对于 iframe 视口的
-    // 需要加上 iframe 相对于浏览器视口的偏移
     const iframeRect = iframe.getBoundingClientRect();
     const mouseX = iframeRect.left + event.clientX;
     const mouseY = iframeRect.top + event.clientY;
-
-    // 使用 iframe 内部的 elementFromPoint（使用 iframe 内部坐标）
     const element = iframeDoc.elementFromPoint(event.clientX, event.clientY);
 
     if (element && isVisibleElement(element as HTMLElement)) {
-      // 只在元素变化时更新
       if (element !== hoverElement) {
         setHoverElement(element);
-
         const info = buildElementInfo(element, iframe);
-
-        const hoverInfo: HoverElementInfo = {
-          ...info,
-          mouseX,
-          mouseY
-        };
-
+        const hoverInfo: HoverElementInfo = { ...info, mouseX, mouseY };
         setHoverInfo(hoverInfo);
         onElementHover?.(hoverInfo);
 
-        // 更新悬停高亮
-        setHighlightRect(info.rect);
+        // move 模式下，如果没有已选元素，悬停时显示高亮
+        // 如果有已选元素，高亮保持选中元素的位置
+        if (mode !== 'move' || !selectedElement) {
+          setHighlightRect(info.rect);
+        }
         isHovering.current = true;
       }
     } else {
       setHoverElement(null);
       setHoverInfo(null);
       onElementHover?.(null);
-      setHighlightRect(null);
+      if (mode !== 'move' || !selectedElement) {
+        setHighlightRect(null);
+      }
       isHovering.current = false;
     }
-  }, [enabled, iframeRef, mode, hoverElement, buildElementInfo, onElementHover]);
+  }, [enabled, iframeRef, mode, hoverElement, selectedElement, buildElementInfo, onElementHover]);
 
-  // 处理点击选择（在 iframe 内部监听）
+  // ==================== 点击选择（select 模式） ====================
   const handleClick = useCallback((event: MouseEvent) => {
     if (!enabled || !iframeRef.current) return;
+    if (isDraggingRef.current) return;
+    // move 模式的点击由 mousedown 处理，不走这里
+    if (mode === 'move') return;
 
-    // 🚫 强力阻止事件传播和默认行为，避免触发页面组件的点击事件
     event.preventDefault();
-    event.stopImmediatePropagation(); // 比 stopPropagation 更强力，阻止同阶段的其他监听器
+    event.stopImmediatePropagation();
 
     const iframe = iframeRef.current;
     const iframeDoc = iframe.contentDocument;
-
     if (!iframeDoc) return;
 
-    // 使用 iframe 内部的坐标系统
-    const x = event.clientX;
-    const y = event.clientY;
-
-    // 使用 iframe 内部的 elementFromPoint
-    const element = iframeDoc.elementFromPoint(x, y);
+    const element = iframeDoc.elementFromPoint(event.clientX, event.clientY);
 
     if (element && isVisibleElement(element as HTMLElement)) {
       const info = buildElementInfo(element, iframe);
 
+      restoreSelectedElement(selectedElement);
+
       setSelectedElement(element);
       setElementInfo(info);
       setHighlightRect(info.rect);
-      originalRect.current = info.rect;
+      originalRectRef.current = info.rect;
+      beforeRectRef.current = null;
 
       onElementSelect?.(info);
-
-      // 点击后保持高亮
       isHovering.current = false;
     }
-  }, [enabled, iframeRef, buildElementInfo, onElementSelect]);
+  }, [enabled, iframeRef, mode, buildElementInfo, onElementSelect, selectedElement, restoreSelectedElement]);
 
-  // 初始化 interact.js 用于拖拽和缩放
+  // ==================== Move 模式：点击选择 + 长按拖动 ====================
   useEffect(() => {
-    if (!enabled || !iframeRef.current || mode !== 'move' && mode !== 'resize') return;
-
-    const iframe = iframeRef.current;
-
-    const initInteract = () => {
-      if (!iframe.contentDocument) return;
-
-      const overlay = iframe.contentDocument.querySelector('.ui-selector-highlight');
-      if (!overlay) return;
-
-      if (interactInstance.current) {
-        interactInstance.current.unset();
-      }
-
-      if (mode === 'move') {
-        interactInstance.current = interact(overlay as any)
-          .draggable({
-            listeners: {
-              move: (event: any) => {
-                const newRect = {
-                  ...originalRect.current!,
-                  x: originalRect.current!.x + event.dx,
-                  y: originalRect.current!.y + event.dy
-                };
-                setHighlightRect(newRect);
-
-                if (selectedElement) {
-                  (selectedElement as HTMLElement).style.transform = `translate(${event.dx}px, ${event.dy}px)`;
-                  (selectedElement as HTMLElement).style.transition = 'none';
-                }
-              },
-              end: (event: any) => {
-                if (elementInfo && originalRect.current && selectedElement) {
-                  const intent: MoveIntent = {
-                    type: 'move',
-                    widget_id: elementInfo.id,
-                    widget_path: elementInfo.domPath || '',
-                    widget_type: elementInfo.tag,
-                    before: originalRect.current,
-                    after: {
-                      ...originalRect.current,
-                      x: originalRect.current.x + event.dx,
-                      y: originalRect.current.y + event.dy
-                    }
-                  };
-                  onIntentGenerate?.(intent);
-                }
-              }
-            },
-            modifiers: [
-              interact.modifiers.restrictRect({
-                restriction: 'parent',
-                endOnly: true
-              })
-            ]
-          });
-      } else if (mode === 'resize') {
-        interactInstance.current = interact(overlay as any)
-          .resizable({
-            edges: { top: true, left: true, bottom: true, right: true },
-            listeners: {
-              move: (event: any) => {
-                const newRect = {
-                  x: event.rect.x,
-                  y: event.rect.y,
-                  width: event.rect.width,
-                  height: event.rect.height
-                };
-                setHighlightRect(newRect);
-
-                if (selectedElement) {
-                  (selectedElement as HTMLElement).style.width = `${newRect.width}px`;
-                  (selectedElement as HTMLElement).style.height = `${newRect.height}px`;
-                  (selectedElement as HTMLElement).style.transition = 'none';
-                }
-              },
-              end: (event: any) => {
-                if (elementInfo && originalRect.current) {
-                  const intent: ResizeIntent = {
-                    type: 'resize',
-                    widget_id: elementInfo.id,
-                    widget_path: elementInfo.domPath || '',
-                    widget_type: elementInfo.tag,
-                    before: originalRect.current,
-                    after: {
-                      x: originalRect.current.x,
-                      y: originalRect.current.y,
-                      width: event.rect.width,
-                      height: event.rect.height
-                    }
-                  };
-                  onIntentGenerate?.(intent);
-                }
-              }
-            },
-            modifiers: [
-              interact.modifiers.restrictSize({
-                min: { width: 50, height: 50 },
-                max: { width: 2000, height: 2000 }
-              })
-            ]
-          });
-      }
-    };
-
-    if (iframe.contentDocument?.readyState === 'complete') {
-      initInteract();
-    } else {
-      iframe.addEventListener('load', initInteract);
+    if (!enabled || mode !== 'move' || !iframeRef.current) {
+      return;
     }
 
-    return () => {
-      if (interactInstance.current) {
-        interactInstance.current.unset();
-        interactInstance.current = null;
+    const iframe = iframeRef.current;
+    const iframeDoc = iframe.contentDocument;
+    if (!iframeDoc) return;
+
+    // 区分点击和拖拽的阈值
+    const DRAG_THRESHOLD = 4;
+    let mouseDownX = 0;
+    let mouseDownY = 0;
+    let mouseDownTarget: Element | null = null;
+    let isPotentialDrag = false;
+    let hasMoved = false;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      if (isDraggingRef.current) return;
+
+      const target = e.target as HTMLElement;
+      const element = iframeDoc.elementFromPoint(e.clientX, e.clientY);
+      if (!element || !isVisibleElement(element as HTMLElement)) return;
+
+      mouseDownX = e.clientX;
+      mouseDownY = e.clientY;
+      mouseDownTarget = element;
+      isPotentialDrag = true;
+      hasMoved = false;
+
+      // 如果点击的就是已选元素（或其子元素），准备拖拽
+      if (selectedElement && (selectedElement as HTMLElement).contains(element)) {
+        e.preventDefault();
+        e.stopPropagation();
       }
     };
-  }, [enabled, iframeRef, mode, selectedElement, elementInfo, onIntentGenerate]);
+
+    const onMouseMoveInIframe = (e: MouseEvent) => {
+      if (!isPotentialDrag || isDraggingRef.current) return;
+
+      const dx = e.clientX - mouseDownX;
+      const dy = e.clientY - mouseDownY;
+
+      // 如果有已选元素且鼠标在其上，检测是否超出拖拽阈值
+      if (selectedElement && mouseDownTarget && (selectedElement as HTMLElement).contains(mouseDownTarget)) {
+        if (!hasMoved && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+          // 超出阈值 → 开始拖拽
+          hasMoved = true;
+          isDraggingRef.current = true;
+
+          const element = selectedElement as HTMLElement;
+          element.style.cursor = 'grabbing';
+
+          // 记录 before rect
+          const iframeRect = iframe.getBoundingClientRect();
+          const elRect = element.getBoundingClientRect();
+          const beforeRect: Rect = {
+            x: elRect.left + iframeRect.left,
+            y: elRect.top + iframeRect.top,
+            width: elRect.width,
+            height: elRect.height
+          };
+          beforeRectRef.current = beforeRect;
+
+          // 创建覆盖层，捕获父文档事件
+          createDragOverlay('grabbing');
+
+          let lastClientX = e.clientX;
+          let lastClientY = e.clientY;
+
+          const onDocMouseMove = (ev: MouseEvent) => {
+            if (!isDraggingRef.current) return;
+            ev.preventDefault();
+
+            const moveDx = ev.clientX - lastClientX;
+            const moveDy = ev.clientY - lastClientY;
+            lastClientX = ev.clientX;
+            lastClientY = ev.clientY;
+
+            if (moveDx === 0 && moveDy === 0) return;
+
+            updatePreviewTranslation(element, moveDx, moveDy);
+
+            const newRect = getElementRect(element, iframe);
+            setHighlightRect(newRect);
+          };
+
+          const onDocMouseUp = (ev: MouseEvent) => {
+            if (!isDraggingRef.current) return;
+            ev.preventDefault();
+
+            isDraggingRef.current = false;
+            element.style.cursor = 'grab';
+
+            document.removeEventListener('mousemove', onDocMouseMove);
+            document.removeEventListener('mouseup', onDocMouseUp);
+            removeDragOverlay();
+
+            const afterRect = getElementRect(element, iframe);
+            setHighlightRect(afterRect);
+
+            if (elementInfo && beforeRectRef.current) {
+              const intent: MoveIntent = {
+                type: 'move',
+                widget_id: elementInfo.id,
+                widget_path: elementInfo.domPath || '',
+                widget_type: elementInfo.tag,
+                before: beforeRectRef.current,
+                after: afterRect
+              };
+              onIntentGenerate?.(intent);
+            }
+          };
+
+          document.addEventListener('mousemove', onDocMouseMove);
+          document.addEventListener('mouseup', onDocMouseUp);
+        }
+
+        if (hasMoved) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      if (isDraggingRef.current) return;
+
+      if (isPotentialDrag && !hasMoved) {
+        // 没有移动 → 视为点击，选择元素
+        const element = iframeDoc.elementFromPoint(e.clientX, e.clientY);
+        if (element && isVisibleElement(element as HTMLElement)) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const info = buildElementInfo(element, iframe);
+
+          // 恢复之前选中元素的样式
+          restoreSelectedElement(selectedElement);
+
+          // 如果点击了不同的元素，先恢复之前的编辑样式
+          if (selectedElement && selectedElement !== element) {
+            if (hasPreviewState(selectedElement as HTMLElement)) {
+              resetPreviewForElement(selectedElement as HTMLElement);
+            }
+            resetEditingStyles(selectedElement as HTMLElement);
+          }
+
+          setSelectedElement(element);
+          setElementInfo(info);
+          setHighlightRect(info.rect);
+          originalRectRef.current = info.rect;
+          beforeRectRef.current = null;
+
+          // 应用移动编辑样式
+          applyEditingStyles(element as HTMLElement, 'move');
+
+          onElementSelect?.(info);
+          isHovering.current = false;
+        }
+      }
+
+      isPotentialDrag = false;
+      hasMoved = false;
+      mouseDownTarget = null;
+    };
+
+    iframeDoc.addEventListener('mousedown', onMouseDown, true);
+    iframeDoc.addEventListener('mousemove', onMouseMoveInIframe, true);
+    iframeDoc.addEventListener('mouseup', onMouseUp, true);
+
+    return () => {
+      iframeDoc.removeEventListener('mousedown', onMouseDown, true);
+      iframeDoc.removeEventListener('mousemove', onMouseMoveInIframe, true);
+      iframeDoc.removeEventListener('mouseup', onMouseUp, true);
+      isDraggingRef.current = false;
+      isPotentialDrag = false;
+      removeDragOverlay();
+    };
+  }, [enabled, mode, selectedElement, elementInfo, iframeRef, onIntentGenerate, buildElementInfo, onElementSelect, restoreSelectedElement]);
+
+  // ==================== Resize 行为 - 手动实现 ====================
+  useEffect(() => {
+    if (!enabled || mode !== 'resize' || !selectedElement || !iframeRef.current) {
+      return;
+    }
+
+    const iframe = iframeRef.current;
+    const element = selectedElement as HTMLElement;
+
+    applyEditingStyles(element, 'resize');
+
+    // 记录 before rect
+    const iframeRect = iframe.getBoundingClientRect();
+    const elRect = element.getBoundingClientRect();
+    const beforeRect: Rect = {
+      x: elRect.left + iframeRect.left,
+      y: elRect.top + iframeRect.top,
+      width: elRect.width,
+      height: elRect.height
+    };
+    beforeRectRef.current = beforeRect;
+
+    // 在父文档中创建 resize frame
+    let overlayContainer = document.querySelector('.ui-selector-overlay-container-external') as HTMLElement;
+    if (!overlayContainer) {
+      overlayContainer = document.createElement('div');
+      overlayContainer.className = 'ui-selector-overlay-container-external';
+      overlayContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 99999;';
+      document.body.appendChild(overlayContainer);
+    }
+
+    const resizeFrame = document.createElement('div');
+    resizeFrame.className = 'ui-selector-resize-frame';
+    resizeFrame.style.cssText = `
+      position: fixed;
+      left: ${beforeRect.x}px;
+      top: ${beforeRect.y}px;
+      width: ${beforeRect.width}px;
+      height: ${beforeRect.height}px;
+      pointer-events: auto;
+      cursor: nwse-resize;
+      z-index: 100001;
+      border: 2px solid #FF9800;
+      background: rgba(255, 152, 0, 0.1);
+    `;
+
+    const edges = [
+      { cls: 'nw', style: 'top:-4px;left:-4px;cursor:nw-resize;', edge: 'nw' },
+      { cls: 'ne', style: 'top:-4px;right:-4px;cursor:ne-resize;', edge: 'ne' },
+      { cls: 'sw', style: 'bottom:-4px;left:-4px;cursor:sw-resize;', edge: 'sw' },
+      { cls: 'se', style: 'bottom:-4px;right:-4px;cursor:se-resize;', edge: 'se' },
+      { cls: 'n', style: 'top:-4px;left:50%;transform:translateX(-50%);cursor:n-resize;', edge: 'n' },
+      { cls: 's', style: 'bottom:-4px;left:50%;transform:translateX(-50%);cursor:s-resize;', edge: 's' },
+      { cls: 'w', style: 'top:50%;left:-4px;transform:translateY(-50%);cursor:w-resize;', edge: 'w' },
+      { cls: 'e', style: 'top:50%;right:-4px;transform:translateY(-50%);cursor:e-resize;', edge: 'e' }
+    ];
+    edges.forEach(({ cls, style, edge }) => {
+      const handle = document.createElement('div');
+      handle.className = `resize-handle resize-handle-${cls}`;
+      handle.setAttribute('data-resize-edge', edge);
+      handle.style.cssText = `position:absolute;width:10px;height:10px;background:#FF9800;border-radius:2px;pointer-events:auto;${style}`;
+      resizeFrame.appendChild(handle);
+    });
+
+    overlayContainer.appendChild(resizeFrame);
+    resizeFrameRef.current = resizeFrame;
+
+    type EdgeType = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+
+    let activeEdge: EdgeType | null = null;
+    let startPointerX = 0;
+    let startPointerY = 0;
+    let startFrameLeft = beforeRect.x;
+    let startFrameTop = beforeRect.y;
+    let startFrameWidth = beforeRect.width;
+    let startFrameHeight = beforeRect.height;
+    let startElTranslateX = 0;
+    let startElTranslateY = 0;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const target = e.target as HTMLElement;
+      const edgeAttr = target.getAttribute('data-resize-edge');
+      activeEdge = (edgeAttr as EdgeType) || 'se';
+
+      startPointerX = e.clientX;
+      startPointerY = e.clientY;
+      startFrameLeft = parseFloat(resizeFrame.style.left);
+      startFrameTop = parseFloat(resizeFrame.style.top);
+      startFrameWidth = parseFloat(resizeFrame.style.width);
+      startFrameHeight = parseFloat(resizeFrame.style.height);
+
+      const previewState = (element as any)._previewState;
+      if (previewState) {
+        startElTranslateX = previewState.x || 0;
+        startElTranslateY = previewState.y || 0;
+      } else {
+        startElTranslateX = 0;
+        startElTranslateY = 0;
+      }
+
+      isDraggingRef.current = true;
+
+      const cursorMap: Record<string, string> = {
+        n: 'n-resize', s: 's-resize', e: 'e-resize', w: 'w-resize',
+        ne: 'ne-resize', nw: 'nw-resize', se: 'se-resize', sw: 'sw-resize'
+      };
+      createDragOverlay(cursorMap[activeEdge] || 'nwse-resize');
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        if (!isDraggingRef.current || !activeEdge) return;
+        ev.preventDefault();
+
+        const deltaX = ev.clientX - startPointerX;
+        const deltaY = ev.clientY - startPointerY;
+        const edge = activeEdge;
+
+        let newLeft = startFrameLeft;
+        let newTop = startFrameTop;
+        let newWidth = startFrameWidth;
+        let newHeight = startFrameHeight;
+
+        if (edge.includes('e')) {
+          newWidth = Math.max(30, startFrameWidth + deltaX);
+        }
+        if (edge.includes('w')) {
+          const possibleWidth = Math.max(30, startFrameWidth - deltaX);
+          newLeft = startFrameLeft + (startFrameWidth - possibleWidth);
+          newWidth = possibleWidth;
+        }
+        if (edge.includes('s')) {
+          newHeight = Math.max(30, startFrameHeight + deltaY);
+        }
+        if (edge.includes('n')) {
+          const possibleHeight = Math.max(30, startFrameHeight - deltaY);
+          newTop = startFrameTop + (startFrameHeight - possibleHeight);
+          newHeight = possibleHeight;
+        }
+
+        const translateDeltaX = newLeft - startFrameLeft;
+        const translateDeltaY = newTop - startFrameTop;
+        const totalTranslateX = startElTranslateX + translateDeltaX;
+        const totalTranslateY = startElTranslateY + translateDeltaY;
+
+        const baseTransform = element.style.transform.replace(/translate\([^)]*\)/g, '').trim();
+        element.style.transform = baseTransform
+          ? `${baseTransform} translate(${totalTranslateX}px, ${totalTranslateY}px)`
+          : `translate(${totalTranslateX}px, ${totalTranslateY}px)`;
+        element.style.width = `${newWidth}px`;
+        element.style.height = `${newHeight}px`;
+
+        resizeFrame.style.left = `${newLeft}px`;
+        resizeFrame.style.top = `${newTop}px`;
+        resizeFrame.style.width = `${newWidth}px`;
+        resizeFrame.style.height = `${newHeight}px`;
+
+        const newRect: Rect = { x: newLeft, y: newTop, width: newWidth, height: newHeight };
+        setHighlightRect(newRect);
+      };
+
+      const handleMouseUp = (ev: MouseEvent) => {
+        if (!isDraggingRef.current) return;
+        ev.preventDefault();
+
+        isDraggingRef.current = false;
+        activeEdge = null;
+
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        removeDragOverlay();
+
+        const afterIframeRect = iframe.getBoundingClientRect();
+        const afterElRect = element.getBoundingClientRect();
+        const afterRect: Rect = {
+          x: afterElRect.left + afterIframeRect.left,
+          y: afterElRect.top + afterIframeRect.top,
+          width: afterElRect.width,
+          height: afterElRect.height
+        };
+
+        const translateDeltaX = parseFloat(resizeFrame.style.left) - beforeRect.x;
+        const translateDeltaY = parseFloat(resizeFrame.style.top) - beforeRect.y;
+
+        const existingState = (element as any)._previewState;
+        if (!existingState) {
+          (element as any)._previewState = {
+            baseTransform: '',
+            baseWidth: element.style.width,
+            baseHeight: element.style.height,
+            basePosition: element.style.position,
+            x: translateDeltaX,
+            y: translateDeltaY
+          };
+        } else {
+          existingState.x = translateDeltaX;
+          existingState.y = translateDeltaY;
+        }
+
+        setHighlightRect(afterRect);
+
+        if (elementInfo && beforeRectRef.current) {
+          const intent: ResizeIntent = {
+            type: 'resize',
+            widget_id: elementInfo.id,
+            widget_path: elementInfo.domPath || '',
+            widget_type: elementInfo.tag,
+            before: beforeRectRef.current,
+            after: afterRect
+          };
+          onIntentGenerate?.(intent);
+        }
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    };
+
+    resizeFrame.addEventListener('mousedown', handleMouseDown);
+
+    return () => {
+      resizeFrame.removeEventListener('mousedown', handleMouseDown);
+      if (resizeFrame.parentNode) {
+        resizeFrame.parentNode.removeChild(resizeFrame);
+      }
+      resizeFrameRef.current = null;
+      isDraggingRef.current = false;
+      removeDragOverlay();
+    };
+  }, [enabled, mode, selectedElement, elementInfo, iframeRef, onIntentGenerate]);
+
+  // 模式切换时清理
+  useEffect(() => {
+    if (mode !== 'resize') {
+      cleanupResizeFrame();
+    }
+    // 模式切换时也恢复选中元素的编辑样式
+    if (selectedElement instanceof HTMLElement) {
+      if (hasPreviewState(selectedElement)) {
+        resetPreviewForElement(selectedElement);
+      }
+      resetEditingStyles(selectedElement);
+    }
+  }, [mode, cleanupResizeFrame, selectedElement]);
+
+  // 组件卸载时恢复所有样式
+  useEffect(() => {
+    return () => {
+      restoreSelectedElement(selectedElement);
+      cleanupResizeFrame();
+      removeDragOverlay();
+    };
+  }, []);
 
   // 监听 iframe 加载完成后添加事件监听
   useEffect(() => {
@@ -498,8 +849,6 @@ export function UISelectorOverlay({
 
     const addListeners = () => {
       if (!iframe.contentDocument) return;
-      
-      // 使用 capture 阶段监听 mousemove 和 click
       iframe.contentDocument.addEventListener('mousemove', handleMouseMove, { capture: true, passive: true });
       iframe.contentDocument.addEventListener('click', handleClick, { capture: true });
     };
@@ -512,19 +861,16 @@ export function UISelectorOverlay({
 
     return () => {
       if (iframe.contentDocument) {
-        iframe.contentDocument.removeEventListener('mousemove', handleMouseMove, { capture: true as any });
-        iframe.contentDocument.removeEventListener('click', handleClick, { capture: true as any });
+        iframe.contentDocument.removeEventListener('mousemove', handleMouseMove, { capture: true } as any);
+        iframe.contentDocument.removeEventListener('click', handleClick, { capture: true } as any);
       }
     };
   }, [iframeRef, enabled, handleMouseMove, handleClick]);
 
-  // 渲染高亮覆盖层 - 在父文档中使用 fixed 定位，确保坐标准确
+  // 渲染高亮覆盖层 - 在父文档中使用 fixed 定位
   useEffect(() => {
     if (!iframeRef.current) return;
 
-    const iframe = iframeRef.current;
-
-    // 在父文档中创建覆盖层（而不是在 iframe 内部）
     let overlayContainer = document.querySelector('.ui-selector-overlay-container-external') as HTMLElement;
     if (!overlayContainer) {
       overlayContainer = document.createElement('div');
@@ -533,23 +879,47 @@ export function UISelectorOverlay({
       document.body.appendChild(overlayContainer);
     }
 
-    // ✅ 移除拦截层 - 使用 iframe 内部 capture 阶段的事件监听来阻止传播
-    // 这样 mousemove 可以正常触发悬浮效果，而 click 会被拦截
-
     if (highlightRect && (elementInfo || hoverInfo)) {
-      overlayContainer.innerHTML = '';
+      const oldHighlights = overlayContainer.querySelectorAll('.ui-selector-highlight-external');
+      oldHighlights.forEach(el => el.remove());
+
       const highlight = document.createElement('div');
       highlight.className = 'ui-selector-highlight-external';
-      // highlightRect 已经是相对于视口的坐标了，直接使用
+
+      // move 模式：悬停时用较淡样式，选中元素用实线
+      const isSelected = mode === 'move' && elementInfo && selectedElement;
+      const isHoveringInMove = mode === 'move' && isHovering.current && hoverInfo && !isDraggingRef.current;
+
+      let bgColor = getModeColor(mode);
+      let borderStyle = 'dashed';
+
+      if (mode === 'move') {
+        if (isDraggingRef.current && selectedElement) {
+          bgColor = 'rgba(76, 175, 80, 0.4)';
+          borderStyle = 'solid';
+        } else if (isSelected) {
+          bgColor = 'rgba(76, 175, 80, 0.25)';
+          borderStyle = 'solid';
+        } else if (isHoveringInMove) {
+          bgColor = 'rgba(76, 175, 80, 0.15)';
+          borderStyle = 'dotted';
+        }
+      }
+
+      if (isHovering.current && !elementInfo && mode === 'select') {
+        bgColor = 'rgba(33, 150, 243, 0.2)';
+        borderStyle = 'dotted';
+      }
+
       highlight.style.cssText = `
         position: fixed;
         left: ${highlightRect.x}px;
         top: ${highlightRect.y}px;
         width: ${highlightRect.width}px;
         height: ${highlightRect.height}px;
-        background-color: ${getModeColor(mode)};
-        border: 2px dashed ${getBorderColor(mode)};
-        pointer-events: ${mode === 'resize' ? 'auto' : 'none'};
+        background-color: ${bgColor};
+        border: 2px ${borderStyle} ${getBorderColor(mode)};
+        pointer-events: none;
         z-index: 1000;
         transition: all 0.05s linear;
         box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
@@ -574,15 +944,9 @@ export function UISelectorOverlay({
       modeLabel.textContent = `${mode.toUpperCase()} | ${currentInfo?.tag || 'unknown'} ${currentInfo?.id.slice(0, 25) || ''}${(currentInfo?.id.length || 0) > 25 ? '...' : ''}`;
       highlight.appendChild(modeLabel);
 
-      // 悬停时使用不同样式
-      if (isHovering.current && !elementInfo) {
-        highlight.style.backgroundColor = 'rgba(33, 150, 243, 0.2)';
-        highlight.style.borderStyle = 'dotted';
-      }
-
+      // resize 模式下显示尺寸标签
       if (mode === 'resize') {
         const sizeLabel = document.createElement('div');
-        sizeLabel.className = 'ui-selector-size-label-external';
         sizeLabel.style.cssText = `
           position: absolute;
           bottom: -28px;
@@ -594,39 +958,70 @@ export function UISelectorOverlay({
           border-radius: 4px;
           white-space: nowrap;
         `;
-        sizeLabel.textContent = `${Math.round(highlightRect.width)} × ${Math.round(highlightRect.height)}`;
+        sizeLabel.textContent = `${Math.round(highlightRect.width)} x ${Math.round(highlightRect.height)}`;
         highlight.appendChild(sizeLabel);
+      }
 
-        const corners = ['se', 'sw', 'nw', 'ne'] as const;
-        const cursors = { se: 'se-resize', sw: 'sw-resize', nw: 'nw-resize', ne: 'ne-resize' };
-        corners.forEach(corner => {
-          const handle = document.createElement('div');
-          handle.className = `resize-handle-external resize-handle-${corner}`;
-          handle.style.cssText = `
+      // move 模式下显示偏移标签
+      if (mode === 'move' && beforeRectRef.current && elementInfo) {
+        const deltaX = Math.round(highlightRect.x - beforeRectRef.current.x);
+        const deltaY = Math.round(highlightRect.y - beforeRectRef.current.y);
+        if (deltaX !== 0 || deltaY !== 0) {
+          const offsetLabel = document.createElement('div');
+          offsetLabel.style.cssText = `
             position: absolute;
-            ${corner.includes('n') ? 'top' : 'bottom'}: -6px;
-            ${corner.includes('w') ? 'left' : 'right'}: -6px;
-            width: 12px;
-            height: 12px;
-            background-color: ${getBorderColor(mode)};
-            cursor: ${cursors[corner]};
-            pointer-events: auto;
+            bottom: -28px;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            white-space: nowrap;
           `;
-          highlight.appendChild(handle);
-        });
+          offsetLabel.textContent = `Δx: ${deltaX >= 0 ? '+' : ''}${deltaX}, Δy: ${deltaY >= 0 ? '+' : ''}${deltaY}`;
+          highlight.appendChild(offsetLabel);
+        }
       }
 
       overlayContainer.appendChild(highlight);
-    } else {
-      overlayContainer.innerHTML = '';
+    } else if (!elementInfo && !hoverInfo) {
+      const oldHighlights = overlayContainer.querySelectorAll('.ui-selector-highlight-external');
+      oldHighlights.forEach(el => el.remove());
     }
 
     return () => {
-      if (overlayContainer) {
-        overlayContainer.innerHTML = '';
+      const highlights = overlayContainer?.querySelectorAll('.ui-selector-highlight-external');
+      highlights?.forEach(el => el.remove());
+    };
+  }, [highlightRect, elementInfo, hoverInfo, mode, enabled, iframeRef, selectedElement]);
+
+  // 暴露撤销方法
+  useEffect(() => {
+    if (!iframeRef.current) return;
+
+    const iframe = iframeRef.current;
+    (window as any).__uiSelectorUndo = () => {
+      if (selectedElement instanceof HTMLElement) {
+        const restoredRect = resetPreviewForElement(selectedElement);
+        resetEditingStyles(selectedElement);
+
+        const iframeRect = iframe.getBoundingClientRect();
+        const viewportRect: Rect = {
+          x: restoredRect.x + iframeRect.left,
+          y: restoredRect.y + iframeRect.top,
+          width: restoredRect.width,
+          height: restoredRect.height
+        };
+        setHighlightRect(viewportRect);
+        beforeRectRef.current = null;
       }
     };
-  }, [highlightRect, elementInfo, hoverInfo, mode, isHovering, enabled, iframeRef]);
+
+    return () => {
+      delete (window as any).__uiSelectorUndo;
+    };
+  }, [selectedElement, iframeRef]);
 
   return null;
 }

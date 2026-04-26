@@ -170,6 +170,8 @@ function App() {
   const handleIntentGenerate = (intent: UIIntent) => {
     console.log('🔄 生成 Intent:', intent);
     setLastIntent(intent);
+    // 自动切换到 UI 选择面板，方便查看变更对比
+    setLeftPanelTab('ui');
   };
 
   const handleCopyIntent = async () => {

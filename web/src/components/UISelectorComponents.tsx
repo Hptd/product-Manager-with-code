@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { type SelectorMode, type UISelectorInfo, type UIIntent } from './UISelector';
+import { type SelectorMode, type UISelectorInfo, type UIIntent, type MoveIntent, type ResizeIntent } from './UISelector';
 
 // ==================== Toast 通知组件 ====================
 
@@ -34,22 +34,22 @@ export function ToastContainer({ toasts }: { toasts: Toast[] }) {
 export function ModeSelector({
   currentMode,
   onModeChange,
-  disabled
+  disabled,
+  inline = false
 }: {
   currentMode: SelectorMode;
   onModeChange: (mode: SelectorMode) => void;
   disabled?: boolean;
+  inline?: boolean;
 }) {
   const modes: { mode: SelectorMode; icon: string; label: string; color: string }[] = [
-    { mode: 'select', icon: '🎯', label: '选择', color: '#2196F3' }
-    // 暂时隐藏以下功能，因为功能不好用且错误
-    // { mode: 'move', icon: '✋', label: '移动', color: '#4CAF50' },
-    // { mode: 'resize', icon: '📐', label: '缩放', color: '#FF9800' },
-    // { mode: 'describe', icon: '📝', label: '描述', color: '#9C27B0' }
+    { mode: 'select', icon: '🎯', label: '选择', color: '#2196F3' },
+    { mode: 'move', icon: '✋', label: '移动', color: '#4CAF50' },
+    { mode: 'resize', icon: '📐', label: '缩放', color: '#FF9800' },
   ];
 
   return (
-    <div className="mode-selector">
+    <div className={`mode-selector${inline ? ' mode-selector-inline' : ''}`}>
       {modes.map(({ mode, icon, label, color }) => (
         <button
           key={mode}
@@ -262,6 +262,78 @@ export async function copyOuterHTML(info: UISelectorInfo): Promise<boolean> {
 export async function copyCSSSelector(info: UISelectorInfo): Promise<boolean> {
   const selector = info.cssSelector || info.selector || '';
   return copyToClipboard(selector);
+}
+
+// ==================== AI 提示词构建 ====================
+
+export function buildAiPrompt(info: UISelectorInfo, intent: UIIntent): string {
+  const selector = info.cssSelector || info.selector || '';
+  const domPath = info.domPath || '';
+  const tag = info.tag;
+  const classList = info.classList.length > 0 ? info.classList.join(', ') : '(无)';
+
+  let operation = '';
+  let changeDetails = '';
+
+  if (intent.type === 'move') {
+    const mi = intent as MoveIntent;
+    const deltaX = Math.round(mi.after.x - mi.before.x);
+    const deltaY = Math.round(mi.after.y - mi.before.y);
+    operation = '移动 (Move)';
+    changeDetails = [
+      `位置: (${Math.round(mi.before.x)}, ${Math.round(mi.before.y)}) → (${Math.round(mi.after.x)}, ${Math.round(mi.after.y)})`,
+      `偏移: Δx=${deltaX >= 0 ? '+' : ''}${deltaX}px, Δy=${deltaY >= 0 ? '+' : ''}${deltaY}px`,
+      '',
+      '修改后样式:',
+      `  position: relative;`,
+      `  transform: translate(${deltaX}px, ${deltaY}px);`
+    ].join('\n');
+  } else if (intent.type === 'resize') {
+    const ri = intent as ResizeIntent;
+    const deltaW = Math.round(ri.after.width - ri.before.width);
+    const deltaH = Math.round(ri.after.height - ri.before.height);
+    const deltaLeft = Math.round(ri.after.x - ri.before.x);
+    const deltaTop = Math.round(ri.after.y - ri.before.y);
+    operation = '缩放 (Resize)';
+    const lines = [
+      `位置: (${Math.round(ri.before.x)}, ${Math.round(ri.before.y)}) → (${Math.round(ri.after.x)}, ${Math.round(ri.after.y)})`,
+      `尺寸: ${Math.round(ri.before.width)}×${Math.round(ri.before.height)} → ${Math.round(ri.after.width)}×${Math.round(ri.after.height)}`,
+      `偏移: Δ宽=${deltaW >= 0 ? '+' : ''}${deltaW}px, Δ高=${deltaH >= 0 ? '+' : ''}${deltaH}px`,
+      ''
+    ];
+    const styleLines = ['修改后样式:', '  position: relative;', '  box-sizing: border-box;'];
+    if (deltaLeft !== 0 || deltaTop !== 0) {
+      styleLines.push(`  transform: translate(${deltaLeft}px, ${deltaTop}px);`);
+    }
+    styleLines.push(`  width: ${Math.round(ri.after.width)}px;`, `  height: ${Math.round(ri.after.height)}px;`);
+    changeDetails = lines.concat(styleLines).join('\n');
+  }
+
+  return [
+    '## UI 元素修改',
+    '',
+    '### 元素定位',
+    `- CSS 选择器: ${selector}`,
+    `- DOM 路径: ${domPath}`,
+    `- 标签: ${tag}`,
+    `- 类名: ${classList}`,
+    '',
+    '### 修改内容',
+    `- 操作: ${operation}`,
+    changeDetails
+  ].join('\n');
+}
+
+export function buildJsonPrompt(info: UISelectorInfo, intent: UIIntent): string {
+  return JSON.stringify({
+    element: {
+      cssSelector: info.cssSelector || info.selector,
+      domPath: info.domPath,
+      tag: info.tag,
+      classList: info.classList
+    },
+    intent
+  }, null, 2);
 }
 
 // ==================== Intent 工具函数 ====================
@@ -482,6 +554,9 @@ export function UISelectorDisplay({
             <button className="btn-quick-action" onClick={handleCopyOuterHTML} title="复制 OuterHTML">
               📄 复制 HTML
             </button>
+            <button className="btn-quick-action" onClick={handleCopyStandard} title="复制元素完整信息">
+              📋 复制元素信息
+            </button>
           </div>
 
           {/* 文本内容 */}
@@ -561,6 +636,124 @@ export function UISelectorDisplay({
               )}
             </div>
           </div>
+
+          {/* ========== 移动对比信息 ========== */}
+          {intent && intent.type === 'move' && (
+            <div className="ui-info-section ui-move-compare-section">
+              <span className="label">🔄 移动对比:</span>
+              <div className="ui-change-details">
+                <div className="ui-change-row">
+                  <span className="ui-change-key">位置</span>
+                  <span className="ui-change-compare">
+                    <span className="ui-before">({Math.round(intent.before.x)}, {Math.round(intent.before.y)})</span>
+                    <span className="ui-arrow">→</span>
+                    <span className="ui-after">({Math.round(intent.after.x)}, {Math.round(intent.after.y)})</span>
+                  </span>
+                </div>
+                {(() => {
+                  const dx = Math.round(intent.after.x - intent.before.x);
+                  const dy = Math.round(intent.after.y - intent.before.y);
+                  return (
+                    <div className="ui-change-row">
+                      <span className="ui-change-key">偏移</span>
+                      <span className="ui-change-delta">
+                        Δx={dx >= 0 ? '+' : ''}{dx}px, Δy={dy >= 0 ? '+' : ''}{dy}px
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+              <pre className="ui-style-preview">
+{`position: relative;
+transform: translate(${Math.round(intent.after.x - intent.before.x)}px, ${Math.round(intent.after.y - intent.before.y)}px);`}
+              </pre>
+              <div className="ui-copy-actions" style={{ marginTop: '8px' }}>
+                <button
+                  className="btn-copy-ai-prompt"
+                  onClick={async () => {
+                    const prompt = buildAiPrompt(info, intent);
+                    const ok = await copyToClipboard(prompt);
+                    showToast(ok ? '已复制移动修改信息' : '复制失败', ok ? 'success' : 'error');
+                  }}
+                  title="复制元素信息 + 移动修改对比"
+                >
+                  🔄 复制移动对比
+                </button>
+                <button
+                  className="btn-copy-json"
+                  onClick={async () => {
+                    const json = buildJsonPrompt(info, intent);
+                    const ok = await copyToClipboard(json);
+                    showToast(ok ? '已复制 JSON' : '复制失败', ok ? 'success' : 'error');
+                  }}
+                  title="复制 JSON 格式"
+                >
+                  📋 复制 JSON
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ========== 缩放对比信息 ========== */}
+          {intent && intent.type === 'resize' && (
+            <div className="ui-info-section ui-resize-compare-section">
+              <span className="label">📐 缩放对比:</span>
+              <div className="ui-change-details">
+                <div className="ui-change-row">
+                  <span className="ui-change-key">位置</span>
+                  <span className="ui-change-compare">
+                    <span className="ui-before">({Math.round(intent.before.x)}, {Math.round(intent.before.y)})</span>
+                    <span className="ui-arrow">→</span>
+                    <span className="ui-after">({Math.round(intent.after.x)}, {Math.round(intent.after.y)})</span>
+                  </span>
+                </div>
+                <div className="ui-change-row">
+                  <span className="ui-change-key">尺寸</span>
+                  <span className="ui-change-compare">
+                    <span className="ui-before">{Math.round(intent.before.width)}×{Math.round(intent.before.height)}</span>
+                    <span className="ui-arrow">→</span>
+                    <span className="ui-after">{Math.round(intent.after.width)}×{Math.round(intent.after.height)}</span>
+                  </span>
+                </div>
+                {(() => {
+                  const dw = Math.round(intent.after.width - intent.before.width);
+                  const dh = Math.round(intent.after.height - intent.before.height);
+                  return (
+                    <div className="ui-change-row">
+                      <span className="ui-change-key">增量</span>
+                      <span className="ui-change-delta">
+                        Δ宽={dw >= 0 ? '+' : ''}{dw}px, Δ高={dh >= 0 ? '+' : ''}{dh}px
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+              <div className="ui-copy-actions" style={{ marginTop: '8px' }}>
+                <button
+                  className="btn-copy-ai-prompt"
+                  onClick={async () => {
+                    const prompt = buildAiPrompt(info, intent);
+                    const ok = await copyToClipboard(prompt);
+                    showToast(ok ? '已复制缩放修改信息' : '复制失败', ok ? 'success' : 'error');
+                  }}
+                  title="复制元素信息 + 缩放修改对比"
+                >
+                  📐 复制缩放对比
+                </button>
+                <button
+                  className="btn-copy-json"
+                  onClick={async () => {
+                    const json = buildJsonPrompt(info, intent);
+                    const ok = await copyToClipboard(json);
+                    showToast(ok ? '已复制 JSON' : '复制失败', ok ? 'success' : 'error');
+                  }}
+                  title="复制 JSON 格式"
+                >
+                  📋 复制 JSON
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 属性列表 */}
           {info.attributes && Object.keys(info.attributes).length > 0 && (
@@ -671,7 +864,7 @@ export function UISelectorDisplay({
         </div>
       )}
 
-      {/* Intent 面板 */}
+      {/* Intent 面板 - 变更对比 + 一键复制 */}
       {activeTab === 'intent' && intent && (
         <div className="ui-intent-content">
           <div className="ui-intent-header">
@@ -680,15 +873,138 @@ export function UISelectorDisplay({
               {intent.type === 'resize' && '📐 缩放意图'}
               {intent.type === 'describe' && '📝 描述意图'}
             </span>
-            {onCopyIntent && (
-              <button className="btn-copy-intent" onClick={onCopyIntent}>
-                📋 复制 Intent
-              </button>
-            )}
           </div>
-          <pre className="ui-intent-json">
-            {JSON.stringify(intent, null, 2)}
-          </pre>
+
+          {/* 元素定位信息 */}
+          <div className="ui-change-section">
+            <span className="ui-change-label">📍 元素定位</span>
+            <div className="ui-change-details">
+              <div className="ui-change-row">
+                <span className="ui-change-key">CSS 选择器</span>
+                <code className="ui-change-value">{info.cssSelector || info.selector}</code>
+              </div>
+              <div className="ui-change-row">
+                <span className="ui-change-key">DOM 路径</span>
+                <code className="ui-change-value">{info.domPath}</code>
+              </div>
+              <div className="ui-change-row">
+                <span className="ui-change-key">标签</span>
+                <span className="ui-change-value">{info.tag}</span>
+              </div>
+              {info.classList.length > 0 && (
+                <div className="ui-change-row">
+                  <span className="ui-change-key">类名</span>
+                  <span className="ui-change-value">{info.classList.join(', ')}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 位置/尺寸变化对比 */}
+          <div className="ui-change-section">
+            <span className="ui-change-label">
+              {intent.type === 'move' ? '📐 位置变化' : '📐 尺寸变化'}
+            </span>
+            <div className="ui-change-details">
+              <div className="ui-change-row">
+                <span className="ui-change-key">位置</span>
+                <span className="ui-change-compare">
+                  <span className="ui-before">({Math.round(intent.before.x)}, {Math.round(intent.before.y)})</span>
+                  <span className="ui-arrow">→</span>
+                  <span className="ui-after">({Math.round(intent.after.x)}, {Math.round(intent.after.y)})</span>
+                </span>
+              </div>
+              <div className="ui-change-row">
+                <span className="ui-change-key">尺寸</span>
+                <span className="ui-change-compare">
+                  <span className="ui-before">{Math.round(intent.before.width)}×{Math.round(intent.before.height)}</span>
+                  <span className="ui-arrow">→</span>
+                  <span className="ui-after">{Math.round(intent.after.width)}×{Math.round(intent.after.height)}</span>
+                </span>
+              </div>
+              {intent.type === 'move' && (() => {
+                const dx = Math.round(intent.after.x - intent.before.x);
+                const dy = Math.round(intent.after.y - intent.before.y);
+                return (
+                  <div className="ui-change-row">
+                    <span className="ui-change-key">偏移</span>
+                    <span className="ui-change-delta">
+                      Δx={dx >= 0 ? '+' : ''}{dx}px, Δy={dy >= 0 ? '+' : ''}{dy}px
+                    </span>
+                  </div>
+                );
+              })()}
+              {intent.type === 'resize' && (() => {
+                const dw = Math.round(intent.after.width - intent.before.width);
+                const dh = Math.round(intent.after.height - intent.before.height);
+                return (
+                  <div className="ui-change-row">
+                    <span className="ui-change-key">增量</span>
+                    <span className="ui-change-delta">
+                      Δ宽={dw >= 0 ? '+' : ''}{dw}px, Δ高={dh >= 0 ? '+' : ''}{dh}px
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* 修改后样式预览 */}
+          <div className="ui-change-section">
+            <span className="ui-change-label">💅 修改后样式</span>
+            <pre className="ui-style-preview">
+              {intent.type === 'move' ? (() => {
+                const dx = Math.round(intent.after.x - intent.before.x);
+                const dy = Math.round(intent.after.y - intent.before.y);
+                return `position: relative;\ntransform: translate(${dx}px, ${dy}px);`;
+              })() : (() => {
+                const dl = Math.round(intent.after.x - intent.before.x);
+                const dt = Math.round(intent.after.y - intent.before.y);
+                const lines = ['position: relative;', 'box-sizing: border-box;'];
+                if (dl !== 0 || dt !== 0) lines.push(`transform: translate(${dl}px, ${dt}px);`);
+                lines.push(`width: ${Math.round(intent.after.width)}px;`, `height: ${Math.round(intent.after.height)}px;`);
+                return lines.join('\n');
+              })()}
+            </pre>
+          </div>
+
+          {/* 一键复制 */}
+          <div className="ui-change-section">
+            <span className="ui-change-label">📋 一键复制修改信息</span>
+            <div className="ui-copy-actions">
+              <button
+                className="btn-copy-ai-prompt"
+                onClick={async () => {
+                  const prompt = buildAiPrompt(info, intent);
+                  const ok = await copyToClipboard(prompt);
+                  showToast(ok ? '已复制 AI 提示词' : '复制失败', ok ? 'success' : 'error');
+                }}
+                title="复制定位信息 + 修改内容，可直接粘贴给 AI"
+              >
+                🤖 复制 AI 提示词
+              </button>
+              <button
+                className="btn-copy-json"
+                onClick={async () => {
+                  const json = buildJsonPrompt(info, intent);
+                  const ok = await copyToClipboard(json);
+                  showToast(ok ? '已复制 JSON' : '复制失败', ok ? 'success' : 'error');
+                }}
+                title="复制 JSON 格式"
+              >
+                📋 复制 JSON
+              </button>
+            </div>
+            <pre className="ui-ai-prompt-preview">{buildAiPrompt(info, intent)}</pre>
+          </div>
+
+          {/* 原始 Intent JSON */}
+          <details className="ui-intent-details">
+            <summary className="ui-intent-summary">原始 Intent JSON</summary>
+            <pre className="ui-intent-json">
+              {JSON.stringify(intent, null, 2)}
+            </pre>
+          </details>
         </div>
       )}
     </div>
